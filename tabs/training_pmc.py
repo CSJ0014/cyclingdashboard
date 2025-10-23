@@ -97,11 +97,18 @@ def render():
 
     # --- Weekly Summary ---
     st.subheader("📅 Weekly Training Load Summary")
-    st.dataframe(
-        weekly.tail(10)
-        .style.format({"tss": "{:.0f}", "CTL": "{:.1f}", "ATL": "{:.1f}", "TSB": "{:.1f}"})
-        .apply(lambda s: [f"background-color: {c}" for c in weekly["Color"]], axis=1)
-    )
+
+def highlight_rows(row):
+    color = row["Color"]
+    return [f"background-color: {color}"] * len(row)
+
+styled_weekly = (
+    weekly.tail(10)
+    .style.format({"tss": "{:.0f}", "CTL": "{:.1f}", "ATL": "{:.1f}", "TSB": "{:.1f}"})
+    .apply(highlight_rows, axis=1)
+)
+
+st.dataframe(styled_weekly)
 
     # --- PMC Chart ---
     st.subheader("📊 Performance Management Chart (CTL/ATL/TSB + TSS)")
