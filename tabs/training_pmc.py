@@ -56,12 +56,18 @@ def render():
         st.warning("No valid rides with dates found.")
         return
 
-    # Weekly summary
+    # ✅ Ensure 'date' is a datetime type
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+    df = df.dropna(subset=["date"])
+
+    # --- Weekly Aggregation ---
     df["week"] = df["date"].dt.to_period("W").apply(lambda r: r.start_time)
-    weekly = df.groupby("week").agg({"tss": "sum", "CTL": "last", "ATL": "last", "TSB": "last"}).reset_index()
+    weekly = df.groupby("week").agg(
+        {"tss": "sum", "CTL": "last", "ATL": "last", "TSB": "last"}
+    ).reset_index()
     weekly["Zone"], weekly["Color"] = zip(*weekly["TSB"].map(classify_tsb))
 
-    # --- Weekly TSS Trend ---
+    # --- Weekly TSS Summary ---
     st.subheader("📅 Weekly Training Load Summary")
     st.dataframe(
         weekly.tail(10)
@@ -99,7 +105,8 @@ def render():
     fig_zones = go.Figure()
     fig_zones.add_trace(go.Bar(
         x=zone_df["week"], y=zone_df["TSB"], marker_color=zone_df["Color"],
-        text=zone_df["Zone"], name="TSB Zone", hovertemplate="Week: %{x}<br>TSB: %{y:.1f}<br>Zone: %{text}"
+        text=zone_df["Zone"], name="TSB Zone",
+        hovertemplate="Week: %{x}<br>TSB: %{y:.1f}<br>Zone: %{text}"
     ))
     fig_zones.add_hline(y=0, line_color="black", line_dash="dot")
     fig_zones.update_layout(
