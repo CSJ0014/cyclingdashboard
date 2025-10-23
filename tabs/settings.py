@@ -16,7 +16,6 @@ def render():
     ftp=st.number_input("FTP (Watts)",100,500,int(s.get("FTP",222)))
     hr=st.number_input("Max HR (bpm)",120,220,int(s.get("HR_MAX",200)))
     st.divider()
-
     if st.button("💾 Save FTP & HR Settings"):
         s.update({"FTP":int(ftp),"HR_MAX":int(hr)})
         _save(s)
@@ -24,23 +23,18 @@ def render():
         st.success("✅ Settings saved.")
 
     st.subheader("🔗 Strava Connection")
-    st.markdown("[Create a Strava API App](https://www.strava.com/settings/api) to get your credentials.")
-
-    client_id = st.text_input("Strava Client ID", s.get("STRAVA_CLIENT_ID",""))
-    client_secret = st.text_input("Strava Client Secret", s.get("STRAVA_CLIENT_SECRET",""), type="password")
-
-    if client_id:
-        auth_url = (
-            f"https://www.strava.com/oauth/authorize?client_id={client_id}"
-            "&response_type=code&redirect_uri=http://localhost/exchange_token"
-            "&approval_prompt=force&scope=activity:read_all"
-        )
-        st.markdown(f"[👉 Click here to authorize on Strava]({auth_url})")
+    st.caption("Your Client ID and Secret are securely stored in Streamlit Cloud secrets.")
+    auth_url = (
+        f"https://www.strava.com/oauth/authorize?client_id={st.secrets.get('STRAVA_CLIENT_ID')}"
+        "&response_type=code&redirect_uri=http://localhost/exchange_token"
+        "&approval_prompt=force&scope=activity:read_all"
+    )
+    st.markdown(f"[👉 Click here to authorize on Strava]({auth_url})")
 
     code = st.text_input("Paste the code from the redirected URL after authorization:")
     if st.button("🔐 Connect to Strava"):
-        if not client_id or not client_secret or not code:
-            st.warning("Please fill all fields and paste your code.")
+        if not code:
+            st.warning("Please paste your authorization code.")
         else:
-            msg = connect_strava(client_id, client_secret, code)
+            msg = connect_strava(code)
             st.success(msg)
