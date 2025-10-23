@@ -46,41 +46,72 @@ def strava_refresh_if_needed():
     return None
 
 def fetch_strava_rides(after_year=2025):
-    """Download new rides (Ride, Gravel, Virtual) since given year."""
+    """
+    Download ALL detailed Strava rides (Ride, Gravel, VirtualRide) since given year.
+    Uses pagination to fetch all pages of results.
+    """
     token = strava_refresh_if_needed()
     if not token:
         return "⚠️ Strava not connected."
 
     after_timestamp = int(datetime(after_year, 1, 1, tzinfo=timezone.utc).timestamp())
     headers = {"Authorization": f"Bearer {token}"}
-    url = f"https://www.strava.com/api/v3/athlete/activities?after={after_timestamp}&per_page=100"
-    r = requests.get(url, headers=headers)
-    if r.status_code != 200:
-        return f"⚠️ Failed to fetch rides: {r.text}"
 
-    activities = r.json()
-    new_count = 0
-    for a in activities:
-        if a["type"].lower() not in ["ride", "gravel_ride", "virtualride"]:
-            continue
-        act_id = a["id"]
-        out_path = os.path.join(RAW_DIR, f"activity_{act_id}.json")
-        if os.path.exists(out_path):
-            continue
-        a["_meta"] = {
-            "id": act_id,
-            "name": a.get("name", f"Ride {act_id}"),
-            "distance_m": a.get("distance", 0),
-            "moving_time_s": a.get("moving_time", 0),
-            "average_watts": a.get("average_watts", 0),
-            "average_heartrate": a.get("average_heartrate", 0),
-            "start_date": a.get("start_date", ""),
-            "type": a.get("type", "Ride"),
-        }
-        with open(out_path, "w") as f:
-            json.dump(a, f, indent=2)
-        new_count += 1
-    return f"✅ Synced {new_count} new rides from Strava."
+    page = 1
+    total_new = 0
+    while True:
+        url = f"https://www.strava.com/api/v3/athlete/activities?after={after_timestamp}&per_page=100&page={page}"
+        r = requests.get(url, headers=headers)
+        if r.status_code != 200:
+            return f"⚠️ Failed on page {page}: {r.text}"
+
+        activities = r.json()
+        if not activities:
+            break  # ✅ no more pages
+
+        for a in activities:
+            type_lower = a["type"].lower()
+            if type_lower not in ["ride", "gravel_ride", "virtualride"]:
+                continue
+
+            act_id = a["id"]
+            out_path = os.path.join(RAW_DIR, f"activity_{act_id}.json")
+            if os.path.exists(out_path):
+                continue  # already downloaded
+
+            # --- fetch detailed stream data ---
+            stream_url = f"https://www.strava.com/api/v3/activities/{act_id}/streams"
+            params = {"keys": "time,distance,watts,heartrate,velocity_smooth", "key_by_type": "true"}
+            s = requests.get(stream_url, headers=headers, params=params)
+            data = {}
+            if s.status_code == 200:
+                data = s.json()
+            else:
+                print(f"⚠️ Stream fetch failed for {act_id}: {s.text}")
+
+            # --- merge summary + streams ---
+            ride = {
+                "_meta": {
+                    "id": act_id,
+                    "name": a.get("name", f"Ride {act_id}"),
+                    "distance_m": a.get("distance", 0),
+                    "moving_time_s": a.get("moving_time", 0),
+                    "average_watts": a.get("average_watts", 0),
+                    "average_heartrate": a.get("average_heartrate", 0),
+                    "start_date": a.get("start_date", ""),
+                    "type": a.get("type", "Ride"),
+                }
+            }
+            ride.update(data)
+
+            with open(out_path, "w") as f:
+                json.dump(ride, f, indent=2)
+            total_new += 1
+
+        page += 1
+        time.sleep(0.5)  # small pause to respect Strava API rate limits
+
+    return f"✅ Synced {total_new} new rides (Ride, Gravel, Virtual) from Strava."
 
 def connect_strava(code):
     """Complete OAuth handshake and store tokens using secrets for credentials."""
