@@ -22,7 +22,6 @@ def interpret_training_state(df):
     latest = df.iloc[-1]
     ctl, atl, tsb = latest["CTL"], latest["ATL"], latest["TSB"]
 
-    # Coaching logic
     if tsb > 10:
         status = "fresh and well-recovered"
         suggestion = "This is an excellent time to schedule a key workout or race."
@@ -42,6 +41,33 @@ def interpret_training_state(df):
         f"📈 CTL (Fitness): **{ctl:.1f}**, ATL (Fatigue): **{atl:.1f}**, TSB (Freshness): **{tsb:.1f}**"
     )
 
+def detect_training_phases(df):
+    """Label training blocks (Base, Build, Peak, Recovery) based on CTL and TSB."""
+    if len(df) < 21:
+        df["Phase"] = "Insufficient Data"
+        return df
+
+    phases = []
+    for i in range(len(df)):
+        ctl_trend = df["CTL"].iloc[max(0, i - 14):i + 1].diff().mean()
+        tsb_val = df["TSB"].iloc[i]
+
+        if ctl_trend < -0.1 and tsb_val > 5:
+            phase = "Recovery"
+        elif ctl_trend > 0.15 and tsb_val < -5:
+            phase = "Build"
+        elif ctl_trend > 0.05 and tsb_val > -5 and tsb_val <= 5:
+            phase = "Base"
+        elif ctl_trend < 0.1 and tsb_val > 5:
+            phase = "Peak"
+        else:
+            phase = "Unclassified"
+
+        phases.append(phase)
+
+    df["Phase"] = phases
+    return df
+
 def render():
     st.title("📈 Training Load & Performance Management Dashboard")
 
@@ -56,9 +82,11 @@ def render():
         st.warning("No valid rides with dates found.")
         return
 
-    # ✅ Ensure 'date' is a datetime type
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
     df = df.dropna(subset=["date"])
+
+    # Detect training phases
+    df = detect_training_phases(df)
 
     # --- Weekly Aggregation ---
     df["week"] = df["date"].dt.to_period("W").apply(lambda r: r.start_time)
@@ -67,7 +95,7 @@ def render():
     ).reset_index()
     weekly["Zone"], weekly["Color"] = zip(*weekly["TSB"].map(classify_tsb))
 
-    # --- Weekly TSS Summary ---
+    # --- Weekly Summary ---
     st.subheader("📅 Weekly Training Load Summary")
     st.dataframe(
         weekly.tail(10)
@@ -75,19 +103,13 @@ def render():
         .apply(lambda s: [f"background-color: {c}" for c in weekly["Color"]], axis=1)
     )
 
-    # --- Combined PMC Chart ---
+    # --- PMC Chart ---
     st.subheader("📊 Performance Management Chart (CTL/ATL/TSB + TSS)")
     fig = go.Figure()
-
-    # Bars for daily TSS
     fig.add_trace(go.Bar(x=df["date"], y=df["tss"], name="TSS", marker_color="lightblue", yaxis="y2"))
-
-    # Lines for CTL, ATL, TSB
     fig.add_trace(go.Scatter(x=df["date"], y=df["CTL"], mode="lines", name="CTL (Fitness)", line=dict(color="#2ecc71", width=3)))
     fig.add_trace(go.Scatter(x=df["date"], y=df["ATL"], mode="lines", name="ATL (Fatigue)", line=dict(color="#e67e22", width=2)))
     fig.add_trace(go.Scatter(x=df["date"], y=df["TSB"], mode="lines", name="TSB (Form)", line=dict(color="#3498db", width=2, dash="dot")))
-
-    # Layout
     fig.update_layout(
         yaxis=dict(title="CTL / ATL / TSB", side="left"),
         yaxis2=dict(title="TSS", overlaying="y", side="right"),
@@ -99,25 +121,38 @@ def render():
     )
     st.plotly_chart(fig, use_container_width=True)
 
-    # --- Fatigue Zone Trend ---
-    st.subheader("🩸 Fatigue & Freshness Zones")
-    zone_df = weekly[["week", "TSB", "Zone", "Color"]].copy()
-    fig_zones = go.Figure()
-    fig_zones.add_trace(go.Bar(
-        x=zone_df["week"], y=zone_df["TSB"], marker_color=zone_df["Color"],
-        text=zone_df["Zone"], name="TSB Zone",
-        hovertemplate="Week: %{x}<br>TSB: %{y:.1f}<br>Zone: %{text}"
-    ))
-    fig_zones.add_hline(y=0, line_color="black", line_dash="dot")
-    fig_zones.update_layout(
-        yaxis_title="TSB (Training Stress Balance)",
-        xaxis_title="Week",
+    # --- Phase Visualization ---
+    st.subheader("📆 Training Phase Timeline")
+    phase_colors = {
+        "Base": "#2980b9",
+        "Build": "#e67e22",
+        "Peak": "#9b59b6",
+        "Recovery": "#2ecc71",
+        "Unclassified": "#95a5a6",
+        "Insufficient Data": "#bdc3c7"
+    }
+    phase_df = df.groupby("Phase")["date"].count().reset_index().rename(columns={"date": "Days"})
+    st.dataframe(phase_df)
+
+    phase_chart = go.Figure()
+    for phase, color in phase_colors.items():
+        phase_subset = df[df["Phase"] == phase]
+        if not phase_subset.empty:
+            phase_chart.add_trace(go.Scatter(
+                x=phase_subset["date"], y=phase_subset["CTL"],
+                mode="lines", name=phase,
+                line=dict(width=4, color=color)
+            ))
+    phase_chart.update_layout(
+        title="Training Phase Progression (by CTL)",
+        yaxis_title="CTL (Fitness)",
+        xaxis_title="Date",
         height=400,
         template="plotly_white"
     )
-    st.plotly_chart(fig_zones, use_container_width=True)
+    st.plotly_chart(phase_chart, use_container_width=True)
 
-    # --- Coaching Analysis ---
+    # --- Coaching Insights ---
     st.subheader("💬 Coaching Insights")
     insights = interpret_training_state(df)
     st.markdown(insights)
@@ -127,4 +162,5 @@ def render():
     st.metric("Fitness (CTL)", f"{df['CTL'].iloc[-1]:.1f}")
     st.metric("Fatigue (ATL)", f"{df['ATL'].iloc[-1]:.1f}")
     st.metric("Form (TSB)", f"{df['TSB'].iloc[-1]:.1f}")
-    st.success("✅ Training log updated successfully with detailed coaching insights!")
+    st.metric("Current Phase", df["Phase"].iloc[-1])
+    st.success("✅ Training log updated with phase detection and advanced analysis!")
