@@ -1,6 +1,6 @@
 # ==============================================================
-# 🚴 RIDE HISTORY TAB — Material Design 3 Version
-# Lists rides, shows basic stats, and links to Ride Analysis
+# 🚴 RIDE HISTORY TAB — Material Design 3 Version (Fixed)
+# Lists rides, shows stats, and links to Ride Analysis
 # ==============================================================
 
 import streamlit as st
@@ -18,80 +18,86 @@ RAW_DIR = "ride_data/raw"
 def render():
     st.title("Ride History")
 
-    # Ensure data directory exists
     if not os.path.exists(RAW_DIR):
         st.info("No rides found yet. Sync with Strava to import activities.")
         return
 
-    # Load rides
+    # Collect all rides
     rides = []
     for fname in os.listdir(RAW_DIR):
         if not fname.endswith(".json"):
             continue
-        path = os.path.join(RAW_DIR, fname)
 
+        path = os.path.join(RAW_DIR, fname)
         try:
             with open(path, "r") as f:
                 data = json.load(f)
 
-            # Parse and normalize data
             rides.append({
                 "name": data.get("name", "Untitled Ride"),
-                "date": data.get("start_date_local", "Unknown"),
+                "date": data.get("start_date_local", None),
                 "distance_km": round(data.get("distance", 0) / 1000, 1),
                 "moving_time_min": round(data.get("moving_time", 0) / 60, 1),
                 "avg_power": int(data.get("average_watts", 0)),
-                "id": data.get("id", fname.replace("activity_", "").replace(".json", "")),
+                "id": str(data.get("id", fname)),
                 "path": path,
             })
-        except Exception:
+        except Exception as e:
+            st.warning(f"⚠️ Could not load {fname}: {e}")
             continue
 
     if not rides:
         st.warning("No rides available. Try syncing with Strava.")
         return
 
-    # Sort rides by date descending (most recent first)
+    # Convert to DataFrame for sorting
     df = pd.DataFrame(rides)
+
     if "date" in df.columns:
-        try:
-            df["date"] = pd.to_datetime(df["date"], errors="coerce")
-            df = df.sort_values("date", ascending=False)
-        except Exception:
-            pass
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        df = df.sort_values("date", ascending=False)
 
     st.markdown("### Recent Rides")
 
     # ----------------------------------------------------------
-    # 📋 Render Ride Cards with Analyze Button
+    # 📋 Render Ride Cards
     # ----------------------------------------------------------
-    for i, row in df.iterrows():
-        with st.container():
-            st.markdown(
-                f"""
-                <div style='padding: 10px; border-radius: 10px; margin-bottom: 8px;
-                            background-color: #f7f7f8; border: 1px solid #ddd;'>
-                    <div style='display: flex; justify-content: space-between; align-items: center;'>
-                        <div>
-                            <strong>{row['name']}</strong><br>
-                            <span style='font-size: 0.9em; color: #666;'>📅 {row['date'].strftime('%b %d, %Y') if isinstance(row['date'], datetime) else row['date']}</span>
-                        </div>
-                        <div style='font-size: 0.9em; color: #444;'>
-                            🏁 {row['distance_km']} km |
-                            ⏱ {row['moving_time_min']} min |
-                            ⚡ {row['avg_power']} W
-                        </div>
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+    for idx, row in df.iterrows():
+        ride_id = row["id"]
+        ride_name = row["name"]
+        date_str = (
+            row["date"].strftime("%b %d, %Y") if isinstance(row["date"], datetime) else "Unknown"
+        )
 
-            cols = st.columns([9, 1])
-            with cols[1]:
-                if st.button("🔍", key=f"analyze_{row['id']}", help="Analyze this ride"):
-                    # Save selection and navigate to Ride Analysis
-                    st.session_state["selected_ride_path"] = row["path"]
-                    st.session_state["active_tab"] = "Ride Analysis"
-                    st.query_params["tab"] = "Ride Analysis"
-                    st.rerun()
+        card_html = f"""
+        <div style='
+            background-color: #f8f8f9;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 12px 16px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        '>
+            <div>
+                <strong>{ride_name}</strong><br>
+                <span style='font-size: 0.9em; color: #666;'>📅 {date_str}</span>
+            </div>
+            <div style='font-size: 0.9em; color: #333; text-align: right;'>
+                🏁 {row['distance_km']} km<br>
+                ⚡ {row['avg_power']} W | ⏱ {row['moving_time_min']} min
+            </div>
+        </div>
+        """
+
+        # Render card and button in the same row (unique container each time)
+        c1, c2 = st.columns([10, 1])
+        with c1:
+            st.markdown(card_html, unsafe_allow_html=True)
+        with c2:
+            if st.button("🔍", key=f"analyze_{ride_id}", help=f"Analyze {ride_name}"):
+                st.session_state["selected_ride_path"] = row["path"]
+                st.session_state["active_tab"] = "Ride Analysis"
+                st.query_params["tab"] = "Ride Analysis"
+                st.rerun()
