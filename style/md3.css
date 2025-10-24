@@ -1,5 +1,5 @@
 /* ==========================================================
-   Material Design 3 – Streamlit-native Override Layer
+   Material Design 3 – Streamlit-native Dashboard Theme
    ========================================================== */
 
 :root {
@@ -9,10 +9,10 @@
   --md-sys-color-background: #FDF8FD;
   --md-sys-color-outline: #E0E0E0;
   --md-sys-color-on-surface: #1C1B1F;
-
   --md-shape-corner-large: 16px;
   --md-elev-1: 0 1px 2px rgba(0,0,0,0.08);
   --md-elev-2: 0 2px 4px rgba(0,0,0,0.1);
+  --md-elev-3: 0 4px 8px rgba(0,0,0,0.12);
   --md-font-family: "Inter", "Roboto", sans-serif;
 }
 
@@ -39,24 +39,66 @@ section[data-testid="stSidebar"] {
   background-color: var(--md-sys-color-background);
 }
 
-/* Streamlit Buttons → MD3 style */
+/* === MD3 Top Bar === */
+.md3-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  height: 64px;
+  padding: 0 24px;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  box-shadow: var(--md-elev-2);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.md3-topbar-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--md-sys-color-primary);
+}
+
+/* === MD3 Navigation Bar === */
+.navbar {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 24px;        /* space below top bar */
+  margin-bottom: 24px;     /* space before main content */
+  padding-top: 8px;
+}
+
+/* === MD3 Nav Buttons === */
 div.stButton > button {
   background-color: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
   border: none;
-  border-radius: 12px;
+  border-radius: 20px;
   padding: 0.6rem 1.4rem;
   font-weight: 500;
   box-shadow: var(--md-elev-1);
   transition: all 0.2s ease;
 }
+
 div.stButton > button:hover {
-  box-shadow: var(--md-elev-2);
+  box-shadow: var(--md-elev-3);
   transform: translateY(-1px);
   background-color: #5b43a0;
 }
 
-/* Cards */
+/* Active State */
+.nav-btn.active, div.stButton > button[kind="primary"] {
+  background-color: #EADDFF;
+  color: var(--md-sys-color-primary);
+  border: 2px solid var(--md-sys-color-primary);
+  box-shadow: var(--md-elev-2);
+}
+
+/* === Card Styling === */
 .md-card {
   background: var(--md-sys-color-surface);
   border-radius: var(--md-shape-corner-large);
