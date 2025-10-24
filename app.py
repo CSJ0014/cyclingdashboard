@@ -1,12 +1,13 @@
 # ==============================================================
-# 🚴 CYCLING COACHING DASHBOARD — Material 3 Replica (Bright Red)
+# 🚴 CYCLING COACHING DASHBOARD — Material Design 3 Replica
+# Bright Red Theme · Streamlit-Safe Implementation
 # ==============================================================
 
 import streamlit as st
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-import os
 
+# ---- Internal imports ----
 from utils.strava_sync import fetch_strava_rides, auto_sync_if_ready, reconnect_prompt
 from tabs import (
     ride_upload,
@@ -18,12 +19,12 @@ from tabs import (
 )
 
 # --------------------------------------------------------------
-# ⚙️ PAGE CONFIG
+# ⚙️ PAGE CONFIGURATION
 # --------------------------------------------------------------
 st.set_page_config(page_title="Cycling Coaching Dashboard", layout="wide")
 
 # --------------------------------------------------------------
-# 🎨 MATERIAL 3-STYLE THEME (No JS)
+# 🎨 MATERIAL 3-STYLE THEME (BRIGHT RED)
 # --------------------------------------------------------------
 st.markdown(
     """
@@ -37,26 +38,22 @@ st.markdown(
       --md3-on-surface: #1d1b20;
       --md3-on-surface-variant: #49454f;
       --md3-radius: 10px;
-      --md3-shadow: 0 2px 6px rgba(0,0,0,0.15);
-      --md3-transition: all 0.25s ease;
     }
 
-    body {
-      font-family: "Google Sans", Roboto, sans-serif;
-      background: var(--md3-surface);
+    html, body, [class*="block-container"] {
+      background-color: var(--md3-surface);
       color: var(--md3-on-surface);
+      font-family: "Google Sans", Roboto, sans-serif;
     }
 
-    /* ---- Top App Bar ---- */
+    /* ---- TOP BAR ---- */
     .top-bar {
       position: sticky; top: 0; z-index: 100;
       width: 100%;
       background: var(--md3-primary);
       color: var(--md3-on-primary);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.75rem 1.5rem;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.8rem 1.5rem;
       box-shadow: 0 2px 6px rgba(0,0,0,0.25);
     }
     .top-bar-title {
@@ -65,46 +62,43 @@ st.markdown(
       letter-spacing: 0.02em;
     }
 
-    /* ---- Tabs ---- */
-    .tabs {
-      display: flex;
-      justify-content: center;
+    /* ---- TAB BAR ---- */
+    .tab-bar {
       background: var(--md3-surface-variant);
       border-bottom: 1px solid var(--md3-outline);
-      gap: 0.5rem;
-      padding: 0.5rem;
+      padding: 8px 16px;
+      display: flex;
       flex-wrap: wrap;
+      justify-content: center;
     }
-    .tab-btn {
+
+    /* Streamlit buttons inside tab bar */
+    .tab-bar div.stButton > button {
+      background: transparent;
+      color: rgba(0,0,0,0.70);
       border: none;
-      background: none;
-      color: var(--md3-on-surface-variant);
-      padding: 0.5rem 1rem;
       border-radius: var(--md3-radius);
+      padding: 8px 14px;
       font-weight: 600;
       cursor: pointer;
-      transition: var(--md3-transition);
-      position: relative;
+      transition: background .2s, color .2s;
     }
-    .tab-btn:hover {
-      background: rgba(0,0,0,0.05);
+    .tab-bar div.stButton > button:hover {
+      background: rgba(0,0,0,0.06);
     }
-    .tab-btn.active {
+
+    /* Active tab style */
+    .tab-active {
+      display: inline-block;
+      padding: 8px 14px;
+      border-radius: var(--md3-radius);
+      font-weight: 700;
       color: var(--md3-primary);
-      background: rgba(211,47,47,0.1);
+      background: rgba(211,47,47,0.10);
       box-shadow: inset 0 -2px 0 var(--md3-primary);
     }
 
-    /* ---- Fade Animation ---- */
-    .fade-in {
-      animation: fadeIn 0.3s ease both;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: none; }
-    }
-
-    /* ---- Floating Action Button ---- */
+    /* ---- FAB ---- */
     .fab {
       position: fixed;
       bottom: 24px;
@@ -116,13 +110,17 @@ st.markdown(
       width: 56px; height: 56px;
       display: flex; align-items: center; justify-content: center;
       font-size: 24px;
-      box-shadow: var(--md3-shadow);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
       cursor: pointer;
-      transition: var(--md3-transition);
+      transition: transform .25s, background .25s;
     }
-    .fab:hover {
-      background: #b71c1c;
-      transform: scale(1.05);
+    .fab:hover { transform: scale(1.05); background: #b71c1c; }
+
+    /* ---- ANIMATIONS ---- */
+    .fade-in { animation: fadeIn .3s ease both; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: none; }
     }
     </style>
     """,
@@ -130,7 +128,7 @@ st.markdown(
 )
 
 # --------------------------------------------------------------
-# 🧭 TABS SETUP
+# 🧭 TAB DEFINITIONS
 # --------------------------------------------------------------
 TABS = {
     "Ride Upload": ride_upload,
@@ -144,7 +142,9 @@ TABS = {
 if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = "Ride History"
 
-# ---- Top Bar ----
+# --------------------------------------------------------------
+# 🟥 TOP BAR
+# --------------------------------------------------------------
 st.markdown(
     """
     <div class="top-bar">
@@ -154,23 +154,32 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ---- Material 3-Styled Tabs (Pure HTML) ----
-tab_html = '<div class="tabs">'
-for name in TABS.keys():
-    active = "active" if st.session_state["active_tab"] == name else ""
-    tab_html += f"""
-    <button class="tab-btn {active}" onclick="window.location.search='?tab={name}'">
-      {name}
-    </button>
-    """
-tab_html += "</div>"
-st.markdown(tab_html, unsafe_allow_html=True)
+# --------------------------------------------------------------
+# 🔖 TAB NAVIGATION (Streamlit Buttons)
+# --------------------------------------------------------------
+tab_names = list(TABS.keys())
+active_tab = st.session_state["active_tab"]
 
-# ---- URL + Session State Sync ----
-query_params = st.query_params
-if "tab" in query_params and query_params["tab"] in TABS:
-    st.session_state["active_tab"] = query_params["tab"]
-    st.query_params["tab"] = query_params["tab"]
+st.markdown('<div class="tab-bar">', unsafe_allow_html=True)
+cols = st.columns(len(tab_names))
+
+for i, name in enumerate(tab_names):
+    with cols[i]:
+        if name == active_tab:
+            st.markdown(f"<span class='tab-active'>{name}</span>", unsafe_allow_html=True)
+        else:
+            if st.button(name, key=f"tabbtn_{name}"):
+                st.session_state["active_tab"] = name
+                st.query_params["tab"] = name
+                st.rerun()
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+# ---- Query param sync ----
+qp = st.query_params
+if "tab" in qp and qp["tab"] in TABS and qp["tab"] != st.session_state["active_tab"]:
+    st.session_state["active_tab"] = qp["tab"]
+    st.rerun()
 else:
     st.query_params["tab"] = st.session_state["active_tab"]
 
@@ -182,7 +191,7 @@ TABS[st.session_state["active_tab"]].render()
 st.markdown("</div>", unsafe_allow_html=True)
 
 # --------------------------------------------------------------
-# 🔄 FLOATING ACTION BUTTON
+# 🔄 FLOATING ACTION BUTTON — Refresh
 # --------------------------------------------------------------
 st.markdown(
     """
@@ -192,7 +201,7 @@ st.markdown(
 )
 
 # --------------------------------------------------------------
-# 🧾 SIDEBAR FOOTER & STRAVA STATUS
+# 🧾 SIDEBAR — Strava Sync Status
 # --------------------------------------------------------------
 with st.sidebar:
     st.subheader("Strava Sync")
@@ -204,4 +213,4 @@ with st.sidebar:
     if st.session_state.get("STRAVA_AUTH_REQUIRED"):
         reconnect_prompt()
     st.markdown("---")
-    st.caption("© 2025 Cycling Coaching Dashboard · Material 3 Bright Red Edition (Static CSS)")
+    st.caption("© 2025 Cycling Coaching Dashboard · Material 3 Bright Red Edition")
