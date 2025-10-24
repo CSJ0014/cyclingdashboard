@@ -15,7 +15,9 @@ def list_rides():
             path = os.path.join(RAW_DIR, f)
             with open(path, "r") as file:
                 data = json.load(file)
-            name = data.get("_meta", {}).get("name", "Unnamed Ride")
+            name = data.get("_meta", {}).get("name") or data.get("name") or None
+            if not name:
+                continue  # Skip unnamed rides
             distance = data.get("distance", {}).get("data", [])
             distance_mi = round(distance[-1] / 1609.34, 2) if distance else 0
             rides.append({"Activity": name, "File": f, "Distance (mi)": distance_mi})
@@ -23,21 +25,27 @@ def list_rides():
 
 def render():
     st.title("🚴 Ride History")
-    rides = list_rides()
 
+    rides = list_rides()
     if rides.empty:
-        st.info("No rides found. Sync with Strava or upload files.")
+        st.info("No rides found. Sync with Strava or upload FIT files first.")
         return
 
-    st.write("Click a ride to analyze it:")
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.subheader("📋 Recent Rides")
+
     for _, row in rides.iterrows():
-        cols = st.columns([4, 1, 1])
-        cols[0].markdown(f"**{row['Activity']}** — {row['Distance (mi)']} mi")
-        if cols[1].button("🔍", key=f"analyze_{row['File']}"):
+        cols = st.columns([4, 0.6, 0.6])
+        cols[0].markdown(f"**{row['Activity']}**  —  {row['Distance (mi)']:.2f} mi")
+
+        if cols[1].button("🔍", key=f"view_{row['File']}"):
             st.session_state["selected_ride"] = row["File"]
             st.session_state["active_tab"] = "📊 Ride Analysis"
             st.rerun()
+
         if cols[2].button("🗑️", key=f"delete_{row['File']}"):
             os.remove(os.path.join(RAW_DIR, row["File"]))
             st.success(f"Deleted {row['Activity']}")
             st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
