@@ -50,12 +50,16 @@ def auto_sync_sidebar():
                     st.error(f"⚠️ Manual sync failed: {e}")
 
         # --- Show last sync time ---
-        if last_sync:
-            st.markdown(
-                f"✅ **Last synced:** {last_sync.strftime('%Y-%m-%d %H:%M UTC')}"
-            )
-        else:
-            st.markdown("_No sync record found yet._")
+from datetime import datetime, timezone, timedelta
+
+# Define Eastern Time (UTC-5 or UTC-4 for daylight saving)
+eastern_offset = timedelta(hours=-4)  # adjust automatically later if needed
+
+if last_sync:
+    est_time = (last_sync + eastern_offset).strftime("%Y-%m-%d %I:%M %p EST")
+    st.markdown(f"✅ **Last synced:** {est_time}**")
+else:
+    st.markdown("_No sync record found yet._")
 
 # --- Run sidebar auto-sync on every load ---
 auto_sync_sidebar()
