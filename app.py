@@ -10,6 +10,9 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 import traceback
 
+from utils.layout import init_layout, end_layout
+init_layout("Cycling Dashboard")
+
 try:
     from utils.md3_components import inject_md3_stylesheet
 except Exception as e:
