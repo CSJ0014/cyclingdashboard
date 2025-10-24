@@ -201,13 +201,16 @@ def generate_ride_report(df: pd.DataFrame, metrics: dict, ride_name: str):
 # --------------------------------------------------------------
 
 def _load_all_rides_for_summary(raw_dir: str) -> pd.DataFrame:
-    """Aggregate key stats from all saved ride JSONs safely."""
+    """Aggregate key stats from all saved ride JSONs, using FTP from Streamlit session if available."""
     import json
     import pandas as pd
     import os
+    import streamlit as st
+
+    # --- Get FTP from settings tab (fallback 250W) ---
+    ftp = st.session_state.get("ftp", 250.0)
 
     if not os.path.exists(raw_dir):
-        # Always return consistent structure
         return pd.DataFrame(columns=["date", "distance_km", "avg_power", "tss"])
 
     records = []
@@ -218,7 +221,7 @@ def _load_all_rides_for_summary(raw_dir: str) -> pd.DataFrame:
             with open(os.path.join(raw_dir, fname), "r") as f:
                 data = json.load(f)
 
-            # Parse date robustly
+            # ---- Parse Date ----
             date_val = data.get("start_date_local") or data.get("start_date")
             if not date_val:
                 continue
@@ -226,38 +229,50 @@ def _load_all_rides_for_summary(raw_dir: str) -> pd.DataFrame:
             if pd.isna(date):
                 continue
 
-            # Distance: handle dict or float
+            # ---- Distance ----
             dist = data.get("distance", 0)
             if isinstance(dist, dict):
                 dist = dist.get("data", [0])[-1] if "data" in dist else 0
 
-            # Other metrics
-            tss = data.get("tss", 0) or 0
-            avgp = data.get("average_watts", 0) or 0
+            # ---- Duration ----
+            moving_time = float(data.get("moving_time", 0))
+            hours = moving_time / 3600 if moving_time else 0
 
-            records.append(
-                {
-                    "date": date,
-                    "distance_km": float(dist) / 1000 if dist else 0,
-                    "avg_power": float(avgp),
-                    "tss": float(tss),
-                }
-            )
+            # ---- Power Metrics ----
+            avg_power = data.get("average_watts", 0) or 0
+            np_power = data.get("np_power", avg_power)
+            intensity_factor = data.get("intensity_factor")
 
-        except Exception as e:
-            # Skip file safely
+            # ---- Compute / Estimate TSS ----
+            tss = data.get("tss", None)
+            if not tss or tss == 0:
+                if not intensity_factor and np_power and ftp:
+                    intensity_factor = np_power / ftp
+                if hours > 0 and intensity_factor:
+                    tss = (hours * (intensity_factor ** 2) * 100)
+                elif hours > 0 and avg_power and ftp:
+                    tss = (hours * ((avg_power / ftp) ** 2) * 100)
+                else:
+                    tss = 0
+
+            records.append({
+                "date": date,
+                "distance_km": dist / 1000 if dist else 0,
+                "avg_power": avg_power,
+                "tss": tss,
+            })
+
+        except Exception:
             continue
 
-    # Guarantee valid output
+    # ---- Always Return a Valid DF ----
     if not records:
         return pd.DataFrame(columns=["date", "distance_km", "avg_power", "tss"])
 
     df = pd.DataFrame(records)
-
-    # Make sure date column always exists even if all missing
     if "date" not in df.columns:
         df["date"] = pd.NaT
 
     df = df.dropna(subset=["date"], how="all")
-    df = df.sort_values("date")
-    return df.reset_index(drop=True)
+    df = df.sort_values("date").reset_index(drop=True)
+    return df
