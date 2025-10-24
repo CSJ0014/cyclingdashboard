@@ -1,3 +1,16 @@
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+from utils.metrics import build_tss_dataframe, get_all_ride_files
+
+
+# ---------- Helper Functions ----------
+
+def classify_tsb(tsb):
+    """Return freshness zone color and label for TSB (Training Stress Balance)."""
+    if tsb > 10:
+        return "Fresh", "#2ecc71"
+
 # --- Weekly Summary ---
 st.subheader("📅 Weekly Training Load Summary")
 
