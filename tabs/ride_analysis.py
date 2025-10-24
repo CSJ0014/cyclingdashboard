@@ -1,81 +1,112 @@
+# ==============================================================
+# 🚴 RIDE ANALYSIS TAB — Material Design 3 Version
+# Streamlit-safe, full data analysis pipeline
+# ==============================================================
+
 import streamlit as st
 import pandas as pd
 import numpy as np
-import json, os
-import plotly.express as px
+import os
+from datetime import datetime
 
-RAW_DIR = "ride_data/raw"
+from utils.ride_analysis_utils import (
+    load_ride_json,
+    strava_json_to_df,
+    compute_ride_metrics,
+)
 
-def load_ride_json(file):
-    path = os.path.join(RAW_DIR, file)
-    if not os.path.exists(path):
-        return None
-    with open(path, "r") as f:
-        return json.load(f)
+# --------------------------------------------------------------
+# 🎯 MAIN ENTRY POINT
+# --------------------------------------------------------------
 
 def render():
-    st.title("📊 Ride Analysis")
+    st.title("Ride Analysis")
 
-    selected = st.session_state.get("selected_ride")
-    if not selected:
-        st.info("Select a ride from the Ride History tab to analyze.")
+    # Retrieve the selected ride from session_state
+    selected_file = st.session_state.get("selected_ride_path", None)
+    if not selected_file or not os.path.exists(selected_file):
+        st.info("Select a ride from **Ride History** to analyze.")
         return
 
-    data = load_ride_json(selected)
+    st.markdown(f"**Analyzing ride:** `{os.path.basename(selected_file)}`")
+
+    # ----------------------------------------------------------
+    # 🧩 Load and parse ride data
+    # ----------------------------------------------------------
+    data = load_ride_json(selected_file)
     if not data:
-        st.error("Ride file not found.")
+        st.error("⚠️ Failed to load ride data.")
         return
 
-    df = pd.DataFrame()
-    if "time" in data:
-        df["time"] = data["time"]["data"]
-    if "distance" in data:
-        df["distance_mi"] = np.array(data["distance"]["data"]) / 1609.34
-    if "watts" in data:
-        df["power"] = data["watts"]["data"]
-    if "heartrate" in data:
-        df["heart_rate"] = data["heartrate"]["data"]
-    if "velocity_smooth" in data:
-        df["speed_mph"] = np.array(data["velocity_smooth"]["data"]) * 2.23694
-
-    if df.empty:
-        st.warning("No valid data in this ride.")
+    try:
+        df = strava_json_to_df(data)
+    except ValueError as e:
+        st.error(f"⚠️ Could not parse stream data: {e}")
         return
 
-    df["minutes"] = df["time"] / 60
+    # ----------------------------------------------------------
+    # ⚙️ Compute metrics
+    # ----------------------------------------------------------
+    ftp = st.session_state.get("ftp", 250)
+    hr_max = st.session_state.get("hr_max", 190)
+    metrics = compute_ride_metrics(df, ftp=ftp, hr_max=hr_max)
 
-    # --- Card: Summary ---
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("🚴 Ride Summary")
-    cols = st.columns(3)
-    cols[0].metric("Distance", f"{df['distance_mi'].iloc[-1]:.2f} mi")
-    cols[1].metric("Duration", f"{df['minutes'].iloc[-1]:.1f} min")
-    cols[2].metric("Avg Power", f"{np.mean(df['power']):.0f} W" if "power" in df else "—")
-    st.markdown('</div>', unsafe_allow_html=True)
+    # ----------------------------------------------------------
+    # 📊 Display Summary
+    # ----------------------------------------------------------
+    st.subheader("Ride Summary")
 
-    # --- Card: Graphs ---
-    with st.expander("📈 View Detailed Graphs", expanded=True):
-        st.markdown('<div class="card">', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Distance (mi)", f"{metrics.get('distance_mi', 0):.1f}")
+    col2.metric("Duration (min)", f"{metrics.get('duration_min', 0):.1f}")
+    col3.metric("Avg Speed (mph)", f"{metrics.get('avg_speed', 0):.1f}")
 
-        if "power" in df:
-            fig = px.line(df, x="minutes", y="power", title="Power (W)")
-            st.plotly_chart(fig, use_container_width=True)
+    col1.metric("Avg Power (W)", f"{metrics.get('avg_power', 0):.0f}")
+    col2.metric("Normalized Power (W)", f"{metrics.get('np_power', 0):.0f}")
+    col3.metric("Intensity Factor", f"{metrics.get('intensity_factor', 0):.2f}")
 
-        if "heart_rate" in df:
-            fig = px.line(df, x="minutes", y="heart_rate", title="Heart Rate (bpm)")
-            st.plotly_chart(fig, use_container_width=True)
+    col1.metric("TSS", f"{metrics.get('tss', 0):.0f}")
+    col2.metric("Avg HR", f"{metrics.get('avg_hr', 0):.0f}")
+    col3.metric("Max HR", f"{metrics.get('max_hr', 0):.0f}")
 
-        if "speed_mph" in df:
-            fig = px.line(df, x="minutes", y="speed_mph", title="Speed (mph)")
-            st.plotly_chart(fig, use_container_width=True)
+    # ----------------------------------------------------------
+    # ❤️ Heart Rate Zones
+    # ----------------------------------------------------------
+    if "hr_zone_dist" in metrics:
+        st.subheader("Heart Rate Zone Distribution")
+        hr_zones = metrics["hr_zone_dist"]
+        zone_df = pd.DataFrame({
+            "Zone": list(hr_zones.keys()),
+            "Time %": list(hr_zones.values())
+        })
+        st.bar_chart(zone_df.set_index("Zone"))
 
-        st.markdown('</div>', unsafe_allow_html=True)
+    # ----------------------------------------------------------
+    # ⚡ Power & HR Trace
+    # ----------------------------------------------------------
+    st.subheader("Ride Trace")
+    plot_cols = [c for c in ["watts", "heartrate", "speed_mph"] if c in df.columns]
 
-    # --- Card: Action Buttons ---
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    cols = st.columns([1,1,4])
-    with cols[0]:
-        st.button("📄 Export Report")
-    with cols[1]:
-        st.button("🗑️ Delete Ride")
-    st.markdown('</div>', unsafe_allow_html=True)
+    if len(plot_cols) > 0:
+        st.line_chart(df[plot_cols])
+    else:
+        st.warning("⚠️ No stream data available for plotting.")
+
+    # ----------------------------------------------------------
+    # 📤 Export Option (Phase 3)
+    # ----------------------------------------------------------
+    st.markdown("---")
+    st.subheader("Export Ride Report")
+
+    st.caption("You can export this analysis to a PDF report for AI-based coaching insights.")
+    if st.button("📄 Generate PDF Report"):
+        from utils.pdf_generator import generate_ride_report
+        report_path = generate_ride_report(df, metrics, os.path.basename(selected_file))
+        st.success(f"✅ Report saved: `{report_path}`")
+        with open(report_path, "rb") as f:
+            st.download_button(
+                label="⬇️ Download Ride Report PDF",
+                data=f,
+                file_name=os.path.basename(report_path),
+                mime="application/pdf",
+            )
