@@ -201,9 +201,14 @@ def generate_ride_report(df: pd.DataFrame, metrics: dict, ride_name: str):
 # --------------------------------------------------------------
 
 def _load_all_rides_for_summary(raw_dir: str) -> pd.DataFrame:
-    """Aggregate key stats from all saved ride JSONs."""
+    """Aggregate key stats from all saved ride JSONs safely."""
+    import json
+    import pandas as pd
+    import os
+
     if not os.path.exists(raw_dir):
-        return pd.DataFrame()
+        # Always return consistent structure
+        return pd.DataFrame(columns=["date", "distance_km", "avg_power", "tss"])
 
     records = []
     for fname in os.listdir(raw_dir):
@@ -213,37 +218,46 @@ def _load_all_rides_for_summary(raw_dir: str) -> pd.DataFrame:
             with open(os.path.join(raw_dir, fname), "r") as f:
                 data = json.load(f)
 
-            # Safely parse date
-            date_val = data.get("start_date_local") or data.get("start_date") or None
+            # Parse date robustly
+            date_val = data.get("start_date_local") or data.get("start_date")
             if not date_val:
-                continue  # skip malformed file
+                continue
             date = pd.to_datetime(date_val, errors="coerce")
             if pd.isna(date):
                 continue
 
-            # Handle both scalar and stream-based distances
+            # Distance: handle dict or float
             dist = data.get("distance", 0)
             if isinstance(dist, dict):
                 dist = dist.get("data", [0])[-1] if "data" in dist else 0
 
-            tss = data.get("tss", 0)
-            avgp = data.get("average_watts", 0)
-            records.append({
-                "date": date,
-                "distance_km": dist / 1000 if dist else 0,
-                "avg_power": avgp or 0,
-                "tss": tss or 0,
-            })
+            # Other metrics
+            tss = data.get("tss", 0) or 0
+            avgp = data.get("average_watts", 0) or 0
+
+            records.append(
+                {
+                    "date": date,
+                    "distance_km": float(dist) / 1000 if dist else 0,
+                    "avg_power": float(avgp),
+                    "tss": float(tss),
+                }
+            )
+
         except Exception as e:
-            # Skip bad file but log if needed
+            # Skip file safely
             continue
 
-    # Safeguard — only keep valid records
+    # Guarantee valid output
     if not records:
         return pd.DataFrame(columns=["date", "distance_km", "avg_power", "tss"])
 
     df = pd.DataFrame(records)
-    df = df.dropna(subset=["date"])
+
+    # Make sure date column always exists even if all missing
+    if "date" not in df.columns:
+        df["date"] = pd.NaT
+
+    df = df.dropna(subset=["date"], how="all")
     df = df.sort_values("date")
-    return df
-     
+    return df.reset_index(drop=True)
