@@ -64,8 +64,11 @@ def refresh_token_if_needed(tokens):
 # 🔁 FETCH ACTIVITIES
 # ============================================================
 
-def fetch_strava_rides(after_year=2025):
-    """Fetch ride, gravel, and virtual activities from Strava."""
+from datetime import datetime, timezone
+import os, json, requests, streamlit as st
+
+def fetch_strava_rides(after_year: int = 2025):
+    """Fetch only rides from Jan 1 of the specified year onward (Ride, VirtualRide, GravelRide)."""
     try:
         tokens = load_tokens()
     except Exception as e:
@@ -74,44 +77,57 @@ def fetch_strava_rides(after_year=2025):
         return "Missing Strava credentials."
 
     tokens = refresh_token_if_needed(tokens)
-
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
+
+    # Only fetch rides starting from Jan 1 of the specified year
     after_timestamp = int(datetime(after_year, 1, 1, tzinfo=timezone.utc).timestamp())
 
-    params = {"after": after_timestamp, "per_page": 100, "page": 1}
-    r = requests.get(f"{STRAVA_API_URL}/athlete/activities", headers=headers, params=params)
-
-    if r.status_code == 401:
-        # Unauthorized → usually missing scopes or expired tokens
-        error_msg = r.json()
-        if any(e.get("code") == "missing" for e in error_msg.get("errors", [])):
-            st.session_state["STRAVA_AUTH_REQUIRED"] = True
-            return "Missing Strava activity permissions. Please reconnect below."
-        else:
-            st.error(f"⚠️ Authorization error: {r.text}")
-            st.session_state["STRAVA_AUTH_REQUIRED"] = True
-            return "Authorization failed. Please reconnect."
-    elif r.status_code != 200:
-        st.error(f"⚠️ Failed to fetch activities: {r.text}")
-        return "Fetch failed."
-
-    activities = r.json()
-    new_count = 0
+    page = 1
+    total_new = 0
+    total_seen = 0
     os.makedirs(RAW_DIR, exist_ok=True)
 
-    for act in activities:
-        if act.get("type") not in ["Ride", "VirtualRide", "GravelRide"]:
-            continue
-        activity_id = act["id"]
-        name = act.get("name", f"Activity {activity_id}")
-        file_path = os.path.join(RAW_DIR, f"activity_{activity_id}.json")
+    while True:
+        params = {"after": after_timestamp, "per_page": 100, "page": page}
+        r = requests.get(f"{STRAVA_API_URL}/athlete/activities", headers=headers, params=params)
 
-        if not os.path.exists(file_path):
-            with open(file_path, "w") as f:
-                json.dump(act, f, indent=2)
-            new_count += 1
+        if r.status_code == 401:
+            st.session_state["STRAVA_AUTH_REQUIRED"] = True
+            return "⚠️ Authorization failed or missing permissions. Please reconnect Strava."
+        elif r.status_code != 200:
+            st.error(f"⚠️ Failed to fetch activities (page {page}): {r.text}")
+            break
 
-    return f"✅ Synced {new_count} new rides (Ride, Gravel, Virtual)."
+        activities = r.json()
+        if not activities:
+            break  # No more pages left
+
+        for act in activities:
+            total_seen += 1
+            if act.get("type") not in ["Ride", "VirtualRide", "GravelRide"]:
+                continue
+            activity_id = act["id"]
+            file_path = os.path.join(RAW_DIR, f"activity_{activity_id}.json")
+            if not os.path.exists(file_path):
+                with open(file_path, "w") as f:
+                    json.dump(act, f, indent=2)
+                total_new += 1
+
+        page += 1
+
+    return f"✅ Synced {total_new} new rides from {after_year} onward ({total_seen} total found)."
+
+
+def auto_sync_if_ready():
+    """Run automatic Strava sync for 2025 onward."""
+    try:
+        msg = fetch_strava_rides(after_year=2025)
+        if "Missing Strava" in msg or "Authorization" in msg:
+            st.session_state["STRAVA_AUTH_REQUIRED"] = True
+        return msg
+    except Exception as e:
+        st.session_state["STRAVA_AUTH_REQUIRED"] = True
+        return f"⚠️ Auto-sync failed: {e}"
 
 
 # ============================================================
