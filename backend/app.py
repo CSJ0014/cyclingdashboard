@@ -1,4 +1,12 @@
 # backend/app.py
+
+import sys, os
+
+# add repo root to Python path so we can import utils
+repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
