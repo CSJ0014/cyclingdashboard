@@ -23,5 +23,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app = FastAPI()
+
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok", "message": "🚴 Cycling Dashboard backend is running!"}
+
 app.include_router(rides.router, prefix="/api/rides", tags=["rides"])
 app.include_router(report.router, prefix="/api/report", tags=["report"])
