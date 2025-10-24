@@ -1,29 +1,15 @@
 # ==============================================================
 # 🚴 CYCLING COACHING DASHBOARD — Material Design 3 Replica
-# Bright Red Theme · Streamlit-Safe Implementation
+# Polished Purple Theme · Streamlit-Safe Implementation
 # ==============================================================
 
 import streamlit as st
+import traceback
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-import streamlit as st
-import traceback
-
+# ---- Internal Imports ----
 from utils.layout import init_layout, end_layout
-init_layout("Cycling Dashboard")
-
-try:
-    from utils.md3_components import inject_md3_stylesheet
-except Exception as e:
-    st.error("❌ MD3 import failed:")
-    st.code(traceback.format_exc())
-    st.stop()
-
-# Load Material Design 3 theme
-inject_md3_stylesheet()
-
-# ---- Internal imports ----
 from utils.strava_sync import fetch_strava_rides, auto_sync_if_ready, reconnect_prompt
 from tabs import (
     ride_upload,
@@ -40,78 +26,91 @@ from tabs import (
 st.set_page_config(page_title="Cycling Coaching Dashboard", layout="wide")
 
 # --------------------------------------------------------------
-# 🎨 MATERIAL 3-STYLE THEME (BRIGHT RED)
+# 🎨 MATERIAL DESIGN 3 PURPLE THEME
 # --------------------------------------------------------------
 st.markdown(
     """
     <style>
+    /* ==========================================================
+       Material Design 3 — Streamlit-native Purple Theme
+       ========================================================== */
     :root {
-      --md3-primary: #d32f2f;
-      --md3-on-primary: #ffffff;
-      --md3-surface: #ffffff;
-      --md3-surface-variant: #f5f5f5;
-      --md3-outline: #d0d0d0;
-      --md3-on-surface: #1d1b20;
-      --md3-on-surface-variant: #49454f;
-      --md3-radius: 10px;
+      --md3-primary: #6750A4;
+      --md3-on-primary: #FFFFFF;
+      --md3-surface: #FFFBFE;
+      --md3-surface-variant: #F4EFFA;
+      --md3-outline: #E0E0E0;
+      --md3-on-surface: #1C1B1F;
+      --md3-radius: 12px;
     }
 
     html, body, [class*="block-container"] {
       background-color: var(--md3-surface);
       color: var(--md3-on-surface);
-      font-family: "Google Sans", Roboto, sans-serif;
+      font-family: "Inter", "Roboto", sans-serif;
     }
 
     /* ---- TOP BAR ---- */
     .top-bar {
-      position: sticky; top: 0; z-index: 100;
+      position: sticky;
+      top: 0;
+      z-index: 100;
       width: 100%;
-      background: var(--md3-primary);
-      color: var(--md3-on-primary);
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0.8rem 1.5rem;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+      background: var(--md3-surface);
+      color: var(--md3-on-surface);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 2rem;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+      border-bottom: 1px solid var(--md3-outline);
     }
     .top-bar-title {
       font-weight: 600;
-      font-size: 1.2rem;
-      letter-spacing: 0.02em;
+      font-size: 1.3rem;
+      color: var(--md3-primary);
+      letter-spacing: 0.01em;
     }
 
     /* ---- TAB BAR ---- */
     .tab-bar {
       background: var(--md3-surface-variant);
       border-bottom: 1px solid var(--md3-outline);
-      padding: 8px 16px;
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
+      padding: 20px 16px 16px 16px; /* adds space below top bar */
+      gap: 12px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
     }
 
     /* Streamlit buttons inside tab bar */
     .tab-bar div.stButton > button {
-      background: transparent;
-      color: rgba(0,0,0,0.70);
+      background: var(--md3-primary);
+      color: var(--md3-on-primary);
       border: none;
-      border-radius: var(--md3-radius);
-      padding: 8px 14px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background .2s, color .2s;
+      border-radius: 24px;
+      padding: 10px 18px;
+      font-weight: 500;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+      transition: all 0.2s ease;
     }
     .tab-bar div.stButton > button:hover {
-      background: rgba(0,0,0,0.06);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      transform: translateY(-1px);
+      background: #5b43a0;
     }
 
     /* Active tab style */
     .tab-active {
       display: inline-block;
-      padding: 8px 14px;
-      border-radius: var(--md3-radius);
-      font-weight: 700;
+      padding: 10px 18px;
+      border-radius: 24px;
+      font-weight: 600;
       color: var(--md3-primary);
-      background: rgba(211,47,47,0.10);
-      box-shadow: inset 0 -2px 0 var(--md3-primary);
+      background: #EADDFF;
+      border: 2px solid var(--md3-primary);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.1);
     }
 
     /* ---- FAB ---- */
@@ -123,20 +122,28 @@ st.markdown(
       background: var(--md3-primary);
       color: var(--md3-on-primary);
       border-radius: 50%;
-      width: 56px; height: 56px;
-      display: flex; align-items: center; justify-content: center;
+      width: 56px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       font-size: 24px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.3);
       cursor: pointer;
-      transition: transform .25s, background .25s;
+      transition: transform 0.25s, background 0.25s;
     }
-    .fab:hover { transform: scale(1.05); background: #b71c1c; }
+    .fab:hover {
+      transform: scale(1.05);
+      background: #5b43a0;
+    }
 
     /* ---- ANIMATIONS ---- */
-    .fade-in { animation: fadeIn .3s ease both; }
+    .fade-in {
+      animation: fadeIn 0.3s ease both;
+    }
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: none; }
+      to   { opacity: 1; transform: none; }
     }
     </style>
     """,
@@ -159,7 +166,7 @@ if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = "Ride History"
 
 # --------------------------------------------------------------
-# 🟥 TOP BAR
+# 🟣 TOP BAR
 # --------------------------------------------------------------
 st.markdown(
     """
@@ -171,7 +178,7 @@ st.markdown(
 )
 
 # --------------------------------------------------------------
-# 🔖 TAB NAVIGATION (Streamlit Buttons)
+# 🔖 TAB NAVIGATION
 # --------------------------------------------------------------
 tab_names = list(TABS.keys())
 active_tab = st.session_state["active_tab"]
@@ -229,6 +236,6 @@ with st.sidebar:
     if st.session_state.get("STRAVA_AUTH_REQUIRED"):
         reconnect_prompt()
     st.markdown("---")
-    st.caption("© 2025 Cycling Coaching Dashboard · Material 3 Bright Red Edition")
+    st.caption("© 2025 Cycling Coaching Dashboard · Material Design 3 Edition")
 
 end_layout()
