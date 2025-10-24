@@ -1,35 +1,36 @@
 # ==============================================================
-# 🚴‍♂️ CYCLING COACHING DASHBOARD — MAIN APP
+# 🚴‍♂️ CYCLING COACHING DASHBOARD — MAIN APP (EST + Smart Sync)
 # ==============================================================
 
 import streamlit as st
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import time
 
-# --- Import all tabs ---
+# --- Import Tabs ---
 from tabs import ride_upload, ride_history, ride_analysis, training_pmc, analytics, settings
 
-# --- Strava Utilities ---
-from utils.strava_sync import fetch_strava_rides
+# --- Import Strava Sync Utilities ---
+from utils.strava_sync import fetch_strava_rides, auto_sync_if_ready, reconnect_prompt
 
 
 # ==============================================================
-# 🧭 Auto Strava Sync Section (with visual feedback)
+# 🔄  Auto Strava Sync Sidebar with Visual Feedback
 # ==============================================================
 
 def auto_sync_sidebar():
-    """Display Strava sync status and run auto-sync once per session."""
+    """Runs Strava auto-sync once per session, shows progress + EST timestamps."""
     with st.sidebar:
         st.markdown("### 🔄 Strava Sync Status")
 
         # Load previous sync time if any
         last_sync = st.session_state.get("last_sync_time")
 
-        # Run automatic sync on first load
+        # Run automatic sync once per session
         if "strava_synced" not in st.session_state:
             with st.spinner("Connecting to Strava and checking for new rides..."):
                 try:
-                    msg = fetch_strava_rides(after_year=2025)
+                    msg = auto_sync_if_ready()
                     st.success(msg)
                     last_sync = datetime.now(timezone.utc)
                     st.session_state["last_sync_time"] = last_sync
@@ -42,31 +43,29 @@ def auto_sync_sidebar():
             with st.spinner("Syncing latest rides from Strava..."):
                 try:
                     msg = fetch_strava_rides(after_year=2025)
-                    time.sleep(1.5)  # Small delay for smoother UI feel
+                    time.sleep(1.5)  # smooth UI delay
                     st.success(msg)
                     last_sync = datetime.now(timezone.utc)
                     st.session_state["last_sync_time"] = last_sync
                 except Exception as e:
                     st.error(f"⚠️ Manual sync failed: {e}")
 
-        # --- Show last sync time ---
-from datetime import datetime, timezone, timedelta
+        # --- Display time of last sync (in Eastern Time) ---
+        if last_sync:
+            local_time = last_sync.astimezone(ZoneInfo("America/New_York"))
+            st.markdown(
+                f"✅ **Last synced:** {local_time.strftime('%Y-%m-%d %I:%M %p %Z')}**"
+            )
+        else:
+            st.markdown("_No sync record found yet._")
 
-# Define Eastern Time (UTC-5 or UTC-4 for daylight saving)
-eastern_offset = timedelta(hours=-4)  # adjust automatically later if needed
-
-if last_sync:
-    est_time = (last_sync + eastern_offset).strftime("%Y-%m-%d %I:%M %p EST")
-    st.markdown(f"✅ **Last synced:** {est_time}**")
-else:
-    st.markdown("_No sync record found yet._")
-
-# --- Run sidebar auto-sync on every load ---
-auto_sync_sidebar()
+        # --- Reconnect prompt if needed ---
+        if st.session_state.get("STRAVA_AUTH_REQUIRED"):
+            reconnect_prompt()
 
 
 # ==============================================================
-# 🧭 Main Navigation Tabs
+# 🧭  Main Navigation Tabs
 # ==============================================================
 
 st.sidebar.markdown("---")
@@ -81,9 +80,12 @@ TABS = {
     "⚙️ Settings": settings,
 }
 
-# --- Default active tab (if first session) ---
+# --- Initialize default active tab ---
 if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = "🚴 Ride History"
+
+# --- Show Auto Sync Sidebar ---
+auto_sync_sidebar()
 
 # --- Sidebar tab navigation ---
 selection = st.sidebar.radio(
@@ -95,6 +97,7 @@ selection = st.sidebar.radio(
 # --- Render selected tab ---
 st.session_state["active_tab"] = selection
 TABS[selection].render()
+
 
 # ==============================================================
 # ✅ Footer
