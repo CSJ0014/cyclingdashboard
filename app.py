@@ -1,16 +1,12 @@
 # ==============================================================
-# 🚴 CYCLING COACHING DASHBOARD — Material Design 3 (Bright Red)
+# 🚴 CYCLING COACHING DASHBOARD — Material 3 Replica (Bright Red)
 # ==============================================================
 
-import importlib.util
 import streamlit as st
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import os
 
-# --------------------------------------------------------------
-# 🎨  STRAVA UTILITIES & TAB IMPORTS
-# --------------------------------------------------------------
 from utils.strava_sync import fetch_strava_rides, auto_sync_if_ready, reconnect_prompt
 from tabs import (
     ride_upload,
@@ -22,116 +18,119 @@ from tabs import (
 )
 
 # --------------------------------------------------------------
-# ⚙️  PAGE CONFIG
+# ⚙️ PAGE CONFIG
 # --------------------------------------------------------------
 st.set_page_config(page_title="Cycling Coaching Dashboard", layout="wide")
 
 # --------------------------------------------------------------
-# 🎨  MATERIAL WEB THEME & STYLES
+# 🎨 MATERIAL 3-STYLE THEME (No JS)
 # --------------------------------------------------------------
 st.markdown(
     """
-    <!-- Load Material Web Components -->
-    <script type="module" src="https://esm.run/@material/web/all.js"></script>
-
     <style>
-      :root {
-        --md-sys-color-primary: #d32f2f;
-        --md-sys-color-on-primary: #ffffff;
-        --md-sys-color-primary-container: #ffdad4;
-        --md-sys-color-on-primary-container: #410001;
-        --md-sys-color-secondary: #ba1a1a;
-        --md-sys-color-on-secondary: #ffffff;
-        --md-sys-color-surface: #ffffff;
-        --md-sys-color-surface-variant: #f5f5f5;
-        --md-sys-color-outline: #d0d0d0;
-        --md-sys-color-on-surface: #1d1b20;
-        --md-sys-color-on-surface-variant: #49454f;
-        --md-sys-typescale-title-medium-size: 1rem;
-      }
+    :root {
+      --md3-primary: #d32f2f;
+      --md3-on-primary: #ffffff;
+      --md3-surface: #ffffff;
+      --md3-surface-variant: #f5f5f5;
+      --md3-outline: #d0d0d0;
+      --md3-on-surface: #1d1b20;
+      --md3-on-surface-variant: #49454f;
+      --md3-radius: 10px;
+      --md3-shadow: 0 2px 6px rgba(0,0,0,0.15);
+      --md3-transition: all 0.25s ease;
+    }
 
-      body {
-        font-family: "Google Sans", Roboto, sans-serif;
-        background-color: var(--md-sys-color-surface);
-        color: var(--md-sys-color-on-surface);
-      }
+    body {
+      font-family: "Google Sans", Roboto, sans-serif;
+      background: var(--md3-surface);
+      color: var(--md3-on-surface);
+    }
 
-      /* --- Top App Bar --- */
-      .top-bar {
-        position: sticky;
-        top: 0;
-        z-index: 100;
-        width: 100%;
-        background: var(--md-sys-color-primary);
-        color: var(--md-sys-color-on-primary);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0.75rem 1.5rem;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-      }
+    /* ---- Top App Bar ---- */
+    .top-bar {
+      position: sticky; top: 0; z-index: 100;
+      width: 100%;
+      background: var(--md3-primary);
+      color: var(--md3-on-primary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1.5rem;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+    .top-bar-title {
+      font-weight: 600;
+      font-size: 1.2rem;
+      letter-spacing: 0.02em;
+    }
 
-      .top-bar-title {
-        font-weight: 600;
-        font-size: 1.2rem;
-        letter-spacing: 0.02em;
-      }
+    /* ---- Tabs ---- */
+    .tabs {
+      display: flex;
+      justify-content: center;
+      background: var(--md3-surface-variant);
+      border-bottom: 1px solid var(--md3-outline);
+      gap: 0.5rem;
+      padding: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .tab-btn {
+      border: none;
+      background: none;
+      color: var(--md3-on-surface-variant);
+      padding: 0.5rem 1rem;
+      border-radius: var(--md3-radius);
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--md3-transition);
+      position: relative;
+    }
+    .tab-btn:hover {
+      background: rgba(0,0,0,0.05);
+    }
+    .tab-btn.active {
+      color: var(--md3-primary);
+      background: rgba(211,47,47,0.1);
+      box-shadow: inset 0 -2px 0 var(--md3-primary);
+    }
 
-      /* --- Fade-in Animation --- */
-      .fade-in {
-        animation: fadeIn 0.3s ease both;
-      }
-      @keyframes fadeIn {
-        from {opacity: 0; transform: translateY(6px);}
-        to {opacity: 1; transform: none;}
-      }
+    /* ---- Fade Animation ---- */
+    .fade-in {
+      animation: fadeIn 0.3s ease both;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: none; }
+    }
 
-      /* --- Floating Action Button --- */
-      .fab {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        z-index: 99;
-      }
-      .fab md-fab {
-        --md-fab-container-color: var(--md-sys-color-primary);
-        --md-fab-icon-color: var(--md-sys-color-on-primary);
-      }
-
-      /* --- Tabs --- */
-      .tabs-container {
-        background: var(--md-sys-color-surface-variant);
-        border-bottom: 1px solid var(--md-sys-color-outline);
-        padding: 0.25rem 1.5rem;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      }
-
-      md-tabs {
-        width: 100%;
-        max-width: 1000px;
-        --md-tabs-active-indicator-color: var(--md-sys-color-primary);
-        --md-primary-tab-active-label-text-color: var(--md-sys-color-primary);
-        --md-primary-tab-label-text-color: var(--md-sys-color-on-surface-variant);
-      }
-
-      md-primary-tab {
-        font-weight: 600;
-        text-transform: none;
-        font-size: 0.95rem;
-      }
-
-      md-primary-tab.active {
-        --md-primary-tab-active-label-text-color: var(--md-sys-color-primary);
-      }
+    /* ---- Floating Action Button ---- */
+    .fab {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 99;
+      background: var(--md3-primary);
+      color: var(--md3-on-primary);
+      border-radius: 50%;
+      width: 56px; height: 56px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+      box-shadow: var(--md3-shadow);
+      cursor: pointer;
+      transition: var(--md3-transition);
+    }
+    .fab:hover {
+      background: #b71c1c;
+      transform: scale(1.05);
+    }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # --------------------------------------------------------------
-# 🧭  TOP NAVIGATION BAR
+# 🧭 TABS SETUP
 # --------------------------------------------------------------
 TABS = {
     "Ride Upload": ride_upload,
@@ -145,7 +144,7 @@ TABS = {
 if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = "Ride History"
 
-# --- Top Bar ---
+# ---- Top Bar ----
 st.markdown(
     """
     <div class="top-bar">
@@ -155,29 +154,19 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- Material Tabs ---
-tab_html = """
-<div class="tabs-container">
-  <md-tabs>
-"""
+# ---- Material 3-Styled Tabs (Pure HTML) ----
+tab_html = '<div class="tabs">'
 for name in TABS.keys():
     active = "active" if st.session_state["active_tab"] == name else ""
     tab_html += f"""
-    <md-primary-tab
-      class="{active}"
-      label="{name}"
-      onclick="window.location.search='?tab={name}'">
-    </md-primary-tab>
+    <button class="tab-btn {active}" onclick="window.location.search='?tab={name}'">
+      {name}
+    </button>
     """
-tab_html += """
-  </md-tabs>
-</div>
-"""
+tab_html += "</div>"
 st.markdown(tab_html, unsafe_allow_html=True)
 
-# --------------------------------------------------------------
-# 🧭  QUERY PARAM SYNC
-# --------------------------------------------------------------
+# ---- URL + Session State Sync ----
 query_params = st.query_params
 if "tab" in query_params and query_params["tab"] in TABS:
     st.session_state["active_tab"] = query_params["tab"]
@@ -186,26 +175,24 @@ else:
     st.query_params["tab"] = st.session_state["active_tab"]
 
 # --------------------------------------------------------------
-# 📊  RENDER CURRENT TAB
+# 📊 RENDER SELECTED TAB
 # --------------------------------------------------------------
 st.markdown("<div class='fade-in'>", unsafe_allow_html=True)
 TABS[st.session_state["active_tab"]].render()
 st.markdown("</div>", unsafe_allow_html=True)
 
 # --------------------------------------------------------------
-# 🔄  FLOATING ACTION BUTTON
+# 🔄 FLOATING ACTION BUTTON
 # --------------------------------------------------------------
 st.markdown(
     """
-    <div class="fab" onclick="window.location.reload()" title="Refresh Strava Data">
-      <md-fab label="Sync" icon="sync"></md-fab>
-    </div>
+    <div class="fab" onclick="window.location.reload()" title="Refresh Strava Data">⟳</div>
     """,
     unsafe_allow_html=True,
 )
 
 # --------------------------------------------------------------
-# 🧾  SIDEBAR FOOTER & STRAVA STATUS
+# 🧾 SIDEBAR FOOTER & STRAVA STATUS
 # --------------------------------------------------------------
 with st.sidebar:
     st.subheader("Strava Sync")
@@ -217,4 +204,4 @@ with st.sidebar:
     if st.session_state.get("STRAVA_AUTH_REQUIRED"):
         reconnect_prompt()
     st.markdown("---")
-    st.caption("© 2025 Cycling Coaching Dashboard · Material Design 3 Bright Red Edition")
+    st.caption("© 2025 Cycling Coaching Dashboard · Material 3 Bright Red Edition (Static CSS)")
