@@ -55,9 +55,10 @@ def render():
 
     inject_md3_style()
 
-    # --- Get FTP from Settings tab (fallback to 250) ---
-    ftp = st.session_state.get("ftp", 250.0)
-    st.caption(f"Using FTP: **{ftp:.0f} W** (from Settings)")
+    # --- Get FTP from Settings tab (fallback to 222) ---
+    ftp = st.session_state.get("Functional Threshold Power (FTP)", 222.0)
+    st.caption(f"Using FTP: **{ftp:.0f} W** (from Settings tab)")
+
 
     # --- Load rides ---
     df = _load_all_rides(raw_dir=RAW_DIR, ftp=ftp)
