@@ -121,6 +121,35 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+/* ======== Material Web Tabs Styling ======== */
+.tabs-container {
+  background: var(--md-sys-color-surface-variant);
+  border-bottom: 1px solid var(--md-sys-color-outline);
+  padding: 0.25rem 1.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+md-tabs {
+  width: 100%;
+  max-width: 1000px;
+  --md-tabs-active-indicator-color: var(--md-sys-color-primary);
+  --md-primary-tab-active-label-text-color: var(--md-sys-color-primary);
+  --md-primary-tab-label-text-color: var(--md-sys-color-on-surface-variant);
+}
+
+md-primary-tab {
+  font-weight: 600;
+  text-transform: none;
+  font-size: 0.95rem;
+}
+
+md-primary-tab.active {
+  --md-primary-tab-active-label-text-color: var(--md-sys-color-primary);
+}
+
+
 # ==============================================================
 # 🧭 TOP NAVIGATION BAR
 # ==============================================================
@@ -147,23 +176,25 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# --- Material Tabs ---
-tab_html = "<div class='tabs-container'>"
+# --- Material Web Top Navigation (Refined MD3 Style) ---
+tab_html = """
+<div class="tabs-container">
+  <md-tabs>
+"""
 for name in TABS.keys():
-    active_class = "active" if st.session_state["active_tab"] == name else ""
+    active = "active" if st.session_state["active_tab"] == name else ""
     tab_html += f"""
-    <md-filled-button class="{active_class}" onclick="window.location.search='?tab={name}'">{name}</md-filled-button>
+    <md-primary-tab
+      class="{active}"
+      label="{name}"
+      onclick="window.location.search='?tab={name}'">
+    </md-primary-tab>
     """
-tab_html += "</div>"
+tab_html += """
+  </md-tabs>
+</div>
+"""
 st.markdown(tab_html, unsafe_allow_html=True)
-
-# --- Tab Logic ---
-query = st.query_params
-if "tab" in query and query["tab"] in TABS:
-    st.session_state["active_tab"] = query["tab"]
-    st.query_params["tab"] = query["tab"]
-else:
-    st.query_params["tab"] = st.session_state["active_tab"]
 
 # ==============================================================
 # 📊 RENDER CURRENT TAB
