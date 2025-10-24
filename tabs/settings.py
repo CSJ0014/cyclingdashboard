@@ -1,40 +1,18 @@
-import streamlit as st, json, os
-from utils.strava_sync import connect_strava
+import streamlit as st
+import json, os
 
-SETTINGS_FILE='ride_data/settings.json'
-
-def _load():
-    return json.load(open(SETTINGS_FILE)) if os.path.exists(SETTINGS_FILE) else {}
-
-def _save(s):
-    os.makedirs('ride_data',exist_ok=True)
-    json.dump(s,open(SETTINGS_FILE,'w'),indent=2)
+SETTINGS_FILE = "ride_data/settings.json"
 
 def render():
     st.title("⚙️ Settings")
-    s=_load()
-    ftp=st.number_input("FTP (Watts)",100,500,int(s.get("FTP",222)))
-    hr=st.number_input("Max HR (bpm)",120,220,int(s.get("HR_MAX",200)))
-    st.divider()
-    if st.button("💾 Save FTP & HR Settings"):
-        s.update({"FTP":int(ftp),"HR_MAX":int(hr)})
-        _save(s)
-        st.session_state["FTP_DEFAULT"]=int(ftp)
-        st.success("✅ Settings saved.")
+    st.markdown("Update your default FTP and Max Heart Rate here.")
 
-    st.subheader("🔗 Strava Connection")
-    st.caption("Your Client ID and Secret are securely stored in Streamlit Cloud secrets.")
-    auth_url = (
-        f"https://www.strava.com/oauth/authorize?client_id={st.secrets.get('STRAVA_CLIENT_ID')}"
-        "&response_type=code&redirect_uri=http://localhost/exchange_token"
-        "&approval_prompt=force&scope=activity:read_all"
-    )
-    st.markdown(f"[👉 Click here to authorize on Strava]({auth_url})")
+    ftp = st.number_input("FTP (Functional Threshold Power)", min_value=50, max_value=500, value=222)
+    hr_max = st.number_input("Max Heart Rate (bpm)", min_value=120, max_value=220, value=200)
 
-    code = st.text_input("Paste the code from the redirected URL after authorization:")
-    if st.button("🔐 Connect to Strava"):
-        if not code:
-            st.warning("Please paste your authorization code.")
-        else:
-            msg = connect_strava(code)
-            st.success(msg)
+    if st.button("💾 Save Settings"):
+        os.makedirs("ride_data", exist_ok=True)
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump({"FTP_DEFAULT": ftp, "HR_MAX": hr_max}, f, indent=2)
+        st.session_state["FTP_DEFAULT"] = ftp
+        st.success("Settings saved successfully.")
