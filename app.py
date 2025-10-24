@@ -31,9 +31,6 @@ st.set_page_config(page_title="Cycling Coaching Dashboard", layout="wide")
 st.markdown(
     """
     <style>
-st.markdown(
-    """
-    <style>
     /* ==========================================================
        Material Design 3 — Streamlit-native Purple Theme (Fixes)
        - Consistent pill buttons
