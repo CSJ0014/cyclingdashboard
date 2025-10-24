@@ -5,3 +5,4 @@ numpy
 requests
 fitparse
 reportlab>=3.6.12
+matplotlib>=3.8.0
