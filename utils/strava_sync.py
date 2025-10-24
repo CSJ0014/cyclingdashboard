@@ -1,46 +1,43 @@
-import os
-import requests
-import json
-import time
-from datetime import datetime, timezone
 import streamlit as st
+import requests
+import os
+import json
+from datetime import datetime, timezone
 
-
-# ==============================================================
-# ⚙️  STRAVA CONFIGURATION
-# ==============================================================
-
-STRAVA_API_BASE = "https://www.strava.com/api/v3"
+STRAVA_API_URL = "https://www.strava.com/api/v3"
 TOKEN_URL = "https://www.strava.com/oauth/token"
 RAW_DIR = "ride_data/raw"
 
+# ============================================================
+# 🔑 TOKEN MANAGEMENT
+# ============================================================
 
-# ==============================================================
-# 🔑  TOKEN MANAGEMENT HELPERS
-# ==============================================================
+def load_tokens():
+    """Load tokens from Streamlit secrets."""
+    required_keys = [
+        "STRAVA_CLIENT_ID",
+        "STRAVA_CLIENT_SECRET",
+        "STRAVA_ACCESS_TOKEN",
+        "STRAVA_REFRESH_TOKEN",
+        "STRAVA_TOKEN_EXPIRES_AT",
+    ]
+    for key in required_keys:
+        if key not in st.secrets:
+            raise ValueError(f"Missing key in Streamlit secrets: {key}")
 
-def get_tokens():
-    """Fetch Strava API credentials and tokens from secrets or session."""
-    return {
-        "client_id": st.secrets.get("STRAVA_CLIENT_ID"),
-        "client_secret": st.secrets.get("STRAVA_CLIENT_SECRET"),
-        "access_token": st.session_state.get("STRAVA_ACCESS_TOKEN", st.secrets.get("STRAVA_ACCESS_TOKEN")),
-        "refresh_token": st.session_state.get("STRAVA_REFRESH_TOKEN", st.secrets.get("STRAVA_REFRESH_TOKEN")),
-        "expires_at": float(st.session_state.get("STRAVA_TOKEN_EXPIRES_AT", st.secrets.get("STRAVA_TOKEN_EXPIRES_AT", "0"))),
-    }
+    return dict(
+        client_id=st.secrets["STRAVA_CLIENT_ID"],
+        client_secret=st.secrets["STRAVA_CLIENT_SECRET"],
+        access_token=st.secrets["STRAVA_ACCESS_TOKEN"],
+        refresh_token=st.secrets["STRAVA_REFRESH_TOKEN"],
+        expires_at=int(st.secrets["STRAVA_TOKEN_EXPIRES_AT"]),
+    )
 
 
-def save_tokens(tokens):
-    """Store refreshed tokens in session so future calls use them."""
-    st.session_state["STRAVA_ACCESS_TOKEN"] = tokens["access_token"]
-    st.session_state["STRAVA_REFRESH_TOKEN"] = tokens["refresh_token"]
-    st.session_state["STRAVA_TOKEN_EXPIRES_AT"] = tokens["expires_at"]
-
-
-def refresh_access_token(tokens):
-    """Refresh Strava access token if expired or invalid."""
-    if not tokens["refresh_token"]:
-        raise ValueError("Missing Strava refresh token. Please reconnect.")
+def refresh_token_if_needed(tokens):
+    """Refresh Strava access token if expired."""
+    if datetime.now(timezone.utc).timestamp() < tokens["expires_at"]:
+        return tokens  # still valid
 
     payload = {
         "client_id": tokens["client_id"],
@@ -49,113 +46,113 @@ def refresh_access_token(tokens):
         "refresh_token": tokens["refresh_token"],
     }
 
-    response = requests.post(TOKEN_URL, data=payload)
-    if response.status_code != 200:
-        raise ValueError(f"Failed to auto-refresh Strava token: {response.text}")
+    r = requests.post(TOKEN_URL, data=payload)
+    if r.status_code != 200:
+        st.error(f"⚠️ Failed to auto-refresh Strava token: {r.text}")
+        st.session_state["STRAVA_AUTH_REQUIRED"] = True
+        return tokens
 
-    new_tokens = response.json()
-    save_tokens({
-        "access_token": new_tokens["access_token"],
-        "refresh_token": new_tokens["refresh_token"],
-        "expires_at": new_tokens["expires_at"],
-    })
-    return new_tokens["access_token"]
-
-
-def ensure_valid_token():
-    """Ensure we have a valid token or refresh it."""
-    tokens = get_tokens()
-    now = time.time()
-
-    # Refresh if token expired
-    if now >= tokens["expires_at"]:
-        try:
-            new_access_token = refresh_access_token(tokens)
-            return new_access_token
-        except ValueError as e:
-            if "invalid" in str(e).lower():
-                st.warning("⚠️ Your Strava authorization has expired. Please reconnect below.")
-                st.session_state["STRAVA_AUTH_REQUIRED"] = True
-                return None
-            raise
-    return tokens["access_token"]
+    new_tokens = r.json()
+    st.session_state["STRAVA_AUTH_REQUIRED"] = False
+    st.session_state["STRAVA_ACCESS_TOKEN"] = new_tokens["access_token"]
+    st.session_state["STRAVA_REFRESH_TOKEN"] = new_tokens["refresh_token"]
+    st.session_state["STRAVA_TOKEN_EXPIRES_AT"] = new_tokens["expires_at"]
+    return tokens
 
 
-# ==============================================================
-# 🚴  RIDE FETCHING
-# ==============================================================
+# ============================================================
+# 🔁 FETCH ACTIVITIES
+# ============================================================
 
 def fetch_strava_rides(after_year=2025):
-    """Fetch recent rides from Strava API."""
-    os.makedirs(RAW_DIR, exist_ok=True)
-    access_token = ensure_valid_token()
-    if not access_token:
-        return "⚠️ Reauthorization required."
+    """Fetch ride, gravel, and virtual activities from Strava."""
+    try:
+        tokens = load_tokens()
+    except Exception as e:
+        st.error(f"⚠️ Missing or invalid Strava tokens: {e}")
+        st.session_state["STRAVA_AUTH_REQUIRED"] = True
+        return "Missing Strava credentials."
 
+    tokens = refresh_token_if_needed(tokens)
+
+    headers = {"Authorization": f"Bearer {tokens['access_token']}"}
     after_timestamp = int(datetime(after_year, 1, 1, tzinfo=timezone.utc).timestamp())
-    headers = {"Authorization": f"Bearer {access_token}"}
 
-    page, new_count = 1, 0
-    while True:
-        resp = requests.get(
-            f"{STRAVA_API_BASE}/athlete/activities",
-            params={"after": after_timestamp, "page": page, "per_page": 50},
-            headers=headers,
-        )
-        if resp.status_code != 200:
-            raise ValueError(f"Failed to fetch activities: {resp.text}")
+    params = {"after": after_timestamp, "per_page": 100, "page": 1}
+    r = requests.get(f"{STRAVA_API_URL}/athlete/activities", headers=headers, params=params)
 
-        activities = resp.json()
-        if not activities:
-            break
+    if r.status_code == 401:
+        # Unauthorized → usually missing scopes or expired tokens
+        error_msg = r.json()
+        if any(e.get("code") == "missing" for e in error_msg.get("errors", [])):
+            st.session_state["STRAVA_AUTH_REQUIRED"] = True
+            return "Missing Strava activity permissions. Please reconnect below."
+        else:
+            st.error(f"⚠️ Authorization error: {r.text}")
+            st.session_state["STRAVA_AUTH_REQUIRED"] = True
+            return "Authorization failed. Please reconnect."
+    elif r.status_code != 200:
+        st.error(f"⚠️ Failed to fetch activities: {r.text}")
+        return "Fetch failed."
 
-        for act in activities:
-            act_type = act.get("type", "")
-            if act_type not in ["Ride", "VirtualRide", "GravelRide"]:
-                continue
-            file_path = os.path.join(RAW_DIR, f"activity_{act['id']}.json")
-            if not os.path.exists(file_path):
-                with open(file_path, "w") as f:
-                    json.dump(act, f, indent=2)
-                new_count += 1
-        page += 1
+    activities = r.json()
+    new_count = 0
+    os.makedirs(RAW_DIR, exist_ok=True)
 
-    return f"✅ Synced {new_count} new rides (Ride, Virtual, Gravel)."
+    for act in activities:
+        if act.get("type") not in ["Ride", "VirtualRide", "GravelRide"]:
+            continue
+        activity_id = act["id"]
+        name = act.get("name", f"Activity {activity_id}")
+        file_path = os.path.join(RAW_DIR, f"activity_{activity_id}.json")
 
+        if not os.path.exists(file_path):
+            with open(file_path, "w") as f:
+                json.dump(act, f, indent=2)
+            new_count += 1
 
-# ==============================================================
-# 🔁  RECONNECT PROMPT
-# ==============================================================
-
-def reconnect_prompt():
-    """Display reconnect button when Strava tokens are invalid."""
-    with st.sidebar:
-        st.warning("⚠️ Strava connection expired. Please reconnect your account.")
-        reconnect_url = (
-            f"https://www.strava.com/oauth/authorize"
-            f"?client_id={st.secrets['STRAVA_CLIENT_ID']}"
-            f"&response_type=code"
-            f"&redirect_uri=https://YOUR-STREAMLIT-APP-URL"
-            f"&approval_prompt=auto&scope=activity:read_all"
-        )
-        st.markdown(f"[🔗 Reconnect to Strava]({reconnect_url})")
+    return f"✅ Synced {new_count} new rides (Ride, Gravel, Virtual)."
 
 
-# ==============================================================
-# ✅  ENTRY POINT FOR AUTO SYNC
-# ==============================================================
+# ============================================================
+# 🧠 AUTO SYNC
+# ============================================================
 
 def auto_sync_if_ready():
-    """Run auto-sync only if tokens are valid and no reauth needed."""
-    if st.session_state.get("STRAVA_AUTH_REQUIRED"):
-        reconnect_prompt()
-        return "⚠️ Reauthorization required."
+    """Run automatic sync if tokens and permissions are valid."""
     try:
         msg = fetch_strava_rides(after_year=2025)
+        if "Missing Strava" in msg or "Authorization" in msg:
+            st.session_state["STRAVA_AUTH_REQUIRED"] = True
         return msg
     except Exception as e:
-        if "invalid" in str(e).lower():
-            st.session_state["STRAVA_AUTH_REQUIRED"] = True
-            reconnect_prompt()
-            return "⚠️ Token invalid; please reconnect."
-        raise
+        st.session_state["STRAVA_AUTH_REQUIRED"] = True
+        return f"⚠️ Auto-sync failed: {e}"
+
+
+# ============================================================
+# 🔗 RECONNECT PROMPT
+# ============================================================
+
+def reconnect_prompt():
+    """Show reconnect link if missing permissions or expired token."""
+    st.markdown("---")
+    st.warning("⚠️ Strava authorization is missing required permissions.")
+    st.markdown("""
+        Please reauthorize your Strava connection to grant **activity:read_all** access.  
+        Click the link below to reconnect:
+    """)
+    client_id = st.secrets.get("STRAVA_CLIENT_ID", "")
+    if not client_id:
+        st.error("⚠️ Missing STRAVA_CLIENT_ID in secrets.")
+        return
+
+    auth_url = (
+        f"https://www.strava.com/oauth/authorize"
+        f"?client_id={client_id}"
+        f"&redirect_uri=http://localhost/exchange_token"
+        f"&response_type=code"
+        f"&scope=read,activity:read_all"
+    )
+    st.markdown(f"👉 [Click here to reconnect your Strava account]({auth_url})", unsafe_allow_html=True)
+    st.markdown("_Once you reconnect, copy your code into Colab to refresh your tokens._")
