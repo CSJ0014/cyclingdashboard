@@ -86,24 +86,29 @@ st.markdown(
       margin-top: 8px;                    /* small space under top bar */
     }
 
-    /* ---- INACTIVE TABS (true pills) ---- */
-    .tab-bar div.stButton > button {
-      background: #FFFFFF !important;                        /* clean surface */
+    /* ---- INACTIVE TABS (true pills, Streamlit columns safe) ---- */
+    div.tab-bar button[kind="secondary"], 
+    div.tab-bar div[data-testid="stButton"] > button {
+      background: #FFFFFF !important;
       color: var(--md3-on-surface) !important;
       border: 1px solid var(--md3-outline) !important;
-      border-radius: var(--md3-radius-pill) !important;      /* <— pill shape */
+      border-radius: 9999px !important;  /* FULL pill shape */
       padding: 10px 18px !important;
       font-weight: 500 !important;
       box-shadow: 0 1px 2px rgba(0,0,0,0.10) !important;
       transition: all 0.2s ease !important;
-    }
-    .tab-bar div.stButton > button:hover {
-      border-color: var(--md3-primary) !important;
-      color: var(--md3-primary) !important;
-      box-shadow: 0 3px 6px rgba(0,0,0,0.16) !important;
-      transform: translateY(-1px);
-      background: #FFFFFF !important;
-    }
+      line-height: 1.2em !important;
+}
+
+div.tab-bar button[kind="secondary"]:hover,
+div.tab-bar div[data-testid="stButton"] > button:hover {
+  border-color: var(--md3-primary) !important;
+  color: var(--md3-primary) !important;
+  box-shadow: 0 3px 6px rgba(0,0,0,0.16) !important;
+  transform: translateY(-1px);
+  background: #FFFFFF !important;
+}
+
 
     /* ---- ACTIVE TAB (tonal pill, same shape & padding) ---- */
     .tab-active {
