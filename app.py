@@ -7,7 +7,15 @@ import streamlit as st
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-from utils.md3_components import inject_md3_stylesheet
+import streamlit as st
+import traceback
+
+try:
+    from utils.md3_components import inject_md3_stylesheet
+except Exception as e:
+    st.error("❌ MD3 import failed:")
+    st.code(traceback.format_exc())
+    st.stop()
 
 # Load Material Design 3 theme
 inject_md3_stylesheet()
