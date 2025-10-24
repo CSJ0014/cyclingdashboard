@@ -1,53 +1,51 @@
 import streamlit as st
-import json, os, re, shutil
+import json, os, re, shutil, importlib.util
 
 SETTINGS_FILE = "ride_data/settings.json"
 THEME_FILE = "utils/css_theme.py"
 DEFAULT_THEME_FILE = "utils/css_theme_default.py"  # for reset fallback
 
-
-# ===============================================================
-# 🔧 Helper Functions
-# ===============================================================
+def inject_live_theme():
+    """Re-inject CSS immediately after saving a color change (live preview)."""
+    theme_path = os.path.join("utils", "css_theme.py")
+    if not os.path.exists(theme_path):
+        return
+    spec = importlib.util.spec_from_file_location("css_theme", theme_path)
+    css_theme = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(css_theme)
+    css_theme.inject_material_theme()
 
 def read_theme_file():
-    """Return the current theme file contents."""
     if not os.path.exists(THEME_FILE):
         return ""
     with open(THEME_FILE, "r") as f:
         return f.read()
 
-
 def update_color(variable, new_value):
-    """Replace a CSS variable's value in the theme file."""
+    """Replace CSS variable's value in the theme and auto-inject live preview."""
     css = read_theme_file()
     pattern = rf"({variable}:\s*)(#[0-9a-fA-F]{{3,8}})"
     updated_css, count = re.subn(pattern, rf"\\1{new_value}", css)
     if count > 0:
         with open(THEME_FILE, "w") as f:
             f.write(updated_css)
+        inject_live_theme()  # 👈 instantly refresh styles
         return True
     return False
-
 
 def reset_theme_to_default():
-    """Restore default theme file from backup."""
     if os.path.exists(DEFAULT_THEME_FILE):
         shutil.copy(DEFAULT_THEME_FILE, THEME_FILE)
+        inject_live_theme()  # 👈 also live-apply default theme
         return True
     return False
-
-
-# ===============================================================
-# ⚙️ Settings Tab
-# ===============================================================
 
 def render():
     st.title("⚙️ Settings")
 
-    # -------------------------------------------------------------
-    # TRAINING SETTINGS SECTION
-    # -------------------------------------------------------------
+    # ==============================================================
+    # TRAINING SETTINGS
+    # ==============================================================
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("🔧 Training Zones & Preferences")
 
@@ -71,58 +69,47 @@ def render():
         st.success("✅ Training settings saved successfully.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-
-    # -------------------------------------------------------------
-    # THEME CUSTOMIZER SECTION
-    # -------------------------------------------------------------
+    # ==============================================================
+    # THEME CUSTOMIZER (AUTO PREVIEW)
+    # ==============================================================
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("🎨 Theme Customizer")
-    st.markdown(
-        "Easily adjust your dashboard’s colors below. "
-        "Your selections update `utils/css_theme.py` directly — no code editing needed."
-    )
 
-    # Button Colors
+    st.markdown("Adjust your dashboard’s colors — they’ll update **instantly** on save.")
+
+    # --- Button Colors ---
     st.markdown("#### 🔘 Buttons")
     col1, col2 = st.columns(2)
     with col1:
         btn_color = st.color_picker("Button Base Color", "#1a73e8")
         if st.button("💾 Save Button Color"):
             if update_color("--button-bg", btn_color):
-                st.success(f"Updated button color → {btn_color}")
-            else:
-                st.warning("⚠️ Variable not found: --button-bg")
+                st.success(f"Updated → {btn_color}")
     with col2:
         hover_color = st.color_picker("Button Hover Color", "#155ab6")
         if st.button("💾 Save Hover Color"):
             if update_color("--button-bg-hover", hover_color):
-                st.success(f"Updated hover color → {hover_color}")
-            else:
-                st.warning("⚠️ Variable not found: --button-bg-hover")
+                st.success(f"Updated → {hover_color}")
 
     st.divider()
 
-    # Card + Background Colors
+    # --- Card + Background Colors ---
     st.markdown("#### 🧱 Cards & Background")
     col3, col4 = st.columns(2)
     with col3:
         card_color = st.color_picker("Card Background", "#ffffff")
         if st.button("💾 Save Card Background"):
-            if update_color("--card-bg", card_color):
-                st.success(f"Updated card background → {card_color}")
-            else:
-                st.warning("⚠️ Variable not found: --card-bg")
+            update_color("--card-bg", card_color)
+            st.success(f"Updated card → {card_color}")
     with col4:
         bg_color = st.color_picker("App Background", "#fafafa")
         if st.button("💾 Save App Background"):
-            if update_color("--background", bg_color):
-                st.success(f"Updated app background → {bg_color}")
-            else:
-                st.warning("⚠️ Variable not found: --background")
+            update_color("--background", bg_color)
+            st.success(f"Updated background → {bg_color}")
 
     st.divider()
 
-    # Accent Colors
+    # --- Accent Colors ---
     st.markdown("#### 🌈 Accent Colors")
     col5, col6, col7 = st.columns(3)
     with col5:
@@ -143,22 +130,16 @@ def render():
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-
-    # -------------------------------------------------------------
+    # ==============================================================
     # RESET SECTION
-    # -------------------------------------------------------------
+    # ==============================================================
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.subheader("🧹 Reset Theme")
 
-    st.markdown("""
-        Click below to restore the original Material Design color theme.  
-        This will overwrite your current `utils/css_theme.py` with the default.
-    """)
-
+    st.markdown("Restore original Material Design colors immediately.")
     if st.button("♻️ Reset to Default Theme"):
         if reset_theme_to_default():
-            st.success("✅ Theme restored to default. Refresh the dashboard to apply.")
+            st.success("✅ Theme restored and live-applied.")
         else:
-            st.error("⚠️ Default theme backup not found (`utils/css_theme_default.py`).")
-
+            st.error("⚠️ Default theme file not found.")
     st.markdown('</div>', unsafe_allow_html=True)
