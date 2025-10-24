@@ -67,8 +67,19 @@ def refresh_token_if_needed(tokens):
 from datetime import datetime, timezone
 import os, json, requests, streamlit as st
 
+def fetch_activity_stream(activity_id: int, access_token: str):
+    """Fetch full time-series streams (distance, power, HR, etc.) for a given activity."""
+    url = f"{STRAVA_API_URL}/activities/{activity_id}/streams"
+    params = {"keys": "time,distance,velocity_smooth,watts,heartrate,altitude", "key_by_type": "true"}
+    headers = {"Authorization": f"Bearer {access_token}"}
+    r = requests.get(url, headers=headers, params=params)
+    if r.status_code != 200:
+        st.warning(f"⚠️ Could not fetch streams for {activity_id}: {r.text}")
+        return None
+    return r.json()
+
 def fetch_strava_rides(after_year: int = 2025):
-    """Fetch only rides from Jan 1 of the specified year onward (Ride, VirtualRide, GravelRide)."""
+    """Fetch rides from Jan 1 after_year onward, with full stream data saved."""
     try:
         tokens = load_tokens()
     except Exception as e:
@@ -78,57 +89,45 @@ def fetch_strava_rides(after_year: int = 2025):
 
     tokens = refresh_token_if_needed(tokens)
     headers = {"Authorization": f"Bearer {tokens['access_token']}"}
-
-    # Only fetch rides starting from Jan 1 of the specified year
     after_timestamp = int(datetime(after_year, 1, 1, tzinfo=timezone.utc).timestamp())
 
     page = 1
     total_new = 0
-    total_seen = 0
     os.makedirs(RAW_DIR, exist_ok=True)
 
     while True:
         params = {"after": after_timestamp, "per_page": 100, "page": page}
         r = requests.get(f"{STRAVA_API_URL}/athlete/activities", headers=headers, params=params)
-
-        if r.status_code == 401:
-            st.session_state["STRAVA_AUTH_REQUIRED"] = True
-            return "⚠️ Authorization failed or missing permissions. Please reconnect Strava."
-        elif r.status_code != 200:
+        if r.status_code != 200:
             st.error(f"⚠️ Failed to fetch activities (page {page}): {r.text}")
             break
 
         activities = r.json()
         if not activities:
-            break  # No more pages left
+            break
 
         for act in activities:
-            total_seen += 1
             if act.get("type") not in ["Ride", "VirtualRide", "GravelRide"]:
                 continue
             activity_id = act["id"]
             file_path = os.path.join(RAW_DIR, f"activity_{activity_id}.json")
+
             if not os.path.exists(file_path):
+                # save summary first
                 with open(file_path, "w") as f:
                     json.dump(act, f, indent=2)
                 total_new += 1
 
+                # fetch detailed streams and merge
+                stream_data = fetch_activity_stream(activity_id, tokens["access_token"])
+                if stream_data:
+                    act.update(stream_data)
+                    with open(file_path, "w") as f:
+                        json.dump(act, f, indent=2)
+
         page += 1
 
-    return f"✅ Synced {total_new} new rides from {after_year} onward ({total_seen} total found)."
-
-
-def auto_sync_if_ready():
-    """Run automatic Strava sync for 2025 onward."""
-    try:
-        msg = fetch_strava_rides(after_year=2025)
-        if "Missing Strava" in msg or "Authorization" in msg:
-            st.session_state["STRAVA_AUTH_REQUIRED"] = True
-        return msg
-    except Exception as e:
-        st.session_state["STRAVA_AUTH_REQUIRED"] = True
-        return f"⚠️ Auto-sync failed: {e}"
-
+    return f"✅ Synced {total_new} new rides with full stream data from {after_year} onward."
 
 # ============================================================
 # 🧠 AUTO SYNC
