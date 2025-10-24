@@ -39,9 +39,6 @@ frontend/
 └── .env.example
 ```
 
-## Environment variable
-- `VITE_API_BASE` — FastAPI backend base URL (e.g. https://api.yourdomain.com)
-
 ## Notes
 - Uses Material UI v6 (MD3).
 - Buttons are non-uppercase, rounded corners, MD3 palette.
