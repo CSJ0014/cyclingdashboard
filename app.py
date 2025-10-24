@@ -95,8 +95,27 @@ def auto_sync_sidebar():
 # 🧭 MAIN NAVIGATION
 # ==============================================================
 
+# ==============================================================
+# 🧭 MAIN NAVIGATION (No-Flicker Version)
+# ==============================================================
+
 st.sidebar.markdown("---")
 st.sidebar.markdown("## 🧭 Navigation")
+
+# Initialize active tab if missing
+if "active_tab" not in st.session_state:
+    st.session_state["active_tab"] = "🚴 Ride History"
+
+# Radio button bound directly to session_state
+selection = st.sidebar.radio(
+    "Select a section:",
+    list(TABS.keys()),
+    key="active_tab",  # 🔑 Bind directly to session state
+    label_visibility="collapsed",
+)
+
+# Render selected tab
+TABS[st.session_state["active_tab"]].render()
 
 TABS = {
     "📤 Ride Upload": ride_upload,
