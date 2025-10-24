@@ -230,3 +230,5 @@ with st.sidebar:
         reconnect_prompt()
     st.markdown("---")
     st.caption("© 2025 Cycling Coaching Dashboard · Material 3 Bright Red Edition")
+
+end_layout()
