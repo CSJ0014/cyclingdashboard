@@ -1,6 +1,6 @@
 # ==============================================================
-# 📄 PDF REPORT GENERATOR — for Cycling Dashboard
-# Generates a ride summary PDF using ReportLab
+# 📄 PDF REPORT GENERATOR — Enhanced Athlete Progress Report
+# Generates single-ride + multi-ride metrics summary (2 pages)
 # ==============================================================
 
 from reportlab.lib.pagesizes import letter
@@ -14,43 +14,51 @@ from reportlab.platypus import (
     Table,
     TableStyle,
     Image,
+    PageBreak,
 )
 import matplotlib.pyplot as plt
 import tempfile
 import pandas as pd
 import os
+from datetime import datetime, timedelta
 
 
 # --------------------------------------------------------------
 # 🧩 MAIN REPORT FUNCTION
 # --------------------------------------------------------------
 
-def generate_ride_report(df: pd.DataFrame, metrics: dict, ride_name: str) -> str:
-    """Generate a PDF ride report and return the file path."""
+def generate_ride_report(df: pd.DataFrame, metrics: dict, ride_name: str):
+    """Generate a PDF ride report and athlete progress summary."""
 
-    # Create temporary folder
+    # --- Paths ---
     os.makedirs("ride_reports", exist_ok=True)
     safe_name = ride_name.replace(".json", "").replace(" ", "_")
     pdf_path = os.path.join("ride_reports", f"{safe_name}_report.pdf")
 
+    # --- Layout setup ---
     doc = SimpleDocTemplate(pdf_path, pagesize=letter)
     styles = getSampleStyleSheet()
-
-    # Title & layout
     elements = []
+
+    # --- Colors ---
+    primary = colors.HexColor("#6200EE")
+    secondary_bg = colors.HexColor("#EDE7F6")
+    accent = colors.HexColor("#311B92")
+
+    # ----------------------------------------------------------
+    # 🚴 PAGE 1 — INDIVIDUAL RIDE SUMMARY
+    # ----------------------------------------------------------
     title_style = ParagraphStyle(
         "title",
         parent=styles["Heading1"],
-        textColor=colors.HexColor("#6200EE"),  # MD3 purple
+        textColor=primary,
         fontSize=20,
         spaceAfter=12,
     )
     elements.append(Paragraph(f"🚴 Ride Report — {ride_name}", title_style))
     elements.append(Spacer(1, 12))
 
-    # ----------------------------------------------------------
-    # 📊 METRICS TABLE
-    # ----------------------------------------------------------
+    # --- Metrics Table ---
     metric_data = [
         ["Metric", "Value"],
         ["Distance (mi)", f"{metrics.get('distance_mi', 0):.1f}"],
@@ -68,26 +76,22 @@ def generate_ride_report(df: pd.DataFrame, metrics: dict, ride_name: str) -> str
     table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EDE7F6")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#311B92")),
-                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("BACKGROUND", (0, 0), (-1, 0), secondary_bg),
+                ("TEXTCOLOR", (0, 0), (-1, 0), accent),
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("BOTTOMPADDING", (0, 0), (-1, 0), 6),
-                ("BACKGROUND", (0, 1), (-1, -1), colors.white),
                 ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ALIGN", (0, 0), (-1, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ]
         )
     )
     elements.append(table)
-    elements.append(Spacer(1, 18))
+    elements.append(Spacer(1, 16))
 
-    # ----------------------------------------------------------
-    # 📈 CHART — Power / HR / Speed
-    # ----------------------------------------------------------
+    # --- Power / HR / Speed Chart ---
     plot_cols = [c for c in ["watts", "heartrate", "speed_mph"] if c in df.columns]
-
     if plot_cols:
-        plt.figure(figsize=(6, 3))
+        plt.figure(figsize=(6.2, 3))
         for col in plot_cols:
             plt.plot(df["time_s"], df[col], label=col.capitalize())
         plt.xlabel("Time (s)")
@@ -101,17 +105,12 @@ def generate_ride_report(df: pd.DataFrame, metrics: dict, ride_name: str) -> str
         plt.close()
 
         elements.append(Image(chart_path, width=6.5 * inch, height=3 * inch))
-        elements.append(Spacer(1, 12))
+        elements.append(Spacer(1, 16))
 
-    # ----------------------------------------------------------
-    # ❤️ HEART RATE ZONES (if available)
-    # ----------------------------------------------------------
+    # --- HR Zones ---
     hr_zones = metrics.get("hr_zone_dist", {})
     if hr_zones:
-        zone_data = [["Zone", "Time %"]]
-        for z, pct in hr_zones.items():
-            zone_data.append([z, f"{pct:.1f}%"])
-
+        zone_data = [["Zone", "Time %"]] + [[z, f"{pct:.1f}%"] for z, pct in hr_zones.items()]
         zone_table = Table(zone_data, hAlign="LEFT")
         zone_table.setStyle(
             TableStyle(
@@ -123,12 +122,112 @@ def generate_ride_report(df: pd.DataFrame, metrics: dict, ride_name: str) -> str
                 ]
             )
         )
-        elements.append(Spacer(1, 12))
         elements.append(Paragraph("Heart Rate Zone Distribution", styles["Heading3"]))
         elements.append(zone_table)
+
+    # ----------------------------------------------------------
+    # 📈 PAGE 2 — ATHLETE PROGRESS REPORT
+    # ----------------------------------------------------------
+    elements.append(PageBreak())
+    elements.append(Paragraph("📊 Athlete Progress Summary", title_style))
+    elements.append(Spacer(1, 12))
+
+    # --- Load all previous ride summaries ---
+    all_data = _load_all_rides_for_summary("ride_data/raw")
+    if all_data.empty:
+        elements.append(Paragraph("No additional rides found for summary.", styles["Normal"]))
+        doc.build(elements)
+        return pdf_path
+
+    # --- Compute trends (weekly TSS, avg power, volume) ---
+    weekly = (
+        all_data.groupby(pd.Grouper(key="date", freq="W"))[
+            ["distance_km", "avg_power", "tss"]
+        ]
+        .mean()
+        .reset_index()
+    )
+
+    # --- Trend Charts ---
+    if not weekly.empty:
+        plt.figure(figsize=(6, 3))
+        plt.plot(weekly["date"], weekly["distance_km"], label="Weekly Distance (km)")
+        plt.plot(weekly["date"], weekly["tss"], label="Weekly TSS")
+        plt.title("Training Volume & Stress Trends")
+        plt.xlabel("Week")
+        plt.legend()
+        plt.tight_layout()
+        chart2_path = tempfile.mktemp(suffix=".png")
+        plt.savefig(chart2_path, dpi=150)
+        plt.close()
+        elements.append(Image(chart2_path, width=6.5 * inch, height=3 * inch))
+        elements.append(Spacer(1, 16))
+
+    # --- Summary Table ---
+    avg_power = all_data["avg_power"].mean()
+    avg_tss = all_data["tss"].mean()
+    total_dist = all_data["distance_km"].sum()
+    total_rides = len(all_data)
+
+    summary_data = [
+        ["Summary Metric", "Value"],
+        ["Total Rides", total_rides],
+        ["Total Distance (km)", f"{total_dist:.1f}"],
+        ["Average Power (W)", f"{avg_power:.1f}"],
+        ["Average TSS", f"{avg_tss:.1f}"],
+    ]
+    summary_table = Table(summary_data, hAlign="LEFT")
+    summary_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), secondary_bg),
+                ("TEXTCOLOR", (0, 0), (-1, 0), accent),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ]
+        )
+    )
+    elements.append(summary_table)
 
     # ----------------------------------------------------------
     # 🧾 BUILD PDF
     # ----------------------------------------------------------
     doc.build(elements)
     return pdf_path
+
+
+# --------------------------------------------------------------
+# 🗂️ HELPER — Load All Rides for Summary
+# --------------------------------------------------------------
+
+def _load_all_rides_for_summary(raw_dir: str) -> pd.DataFrame:
+    """Aggregate key stats from all saved ride JSONs."""
+    if not os.path.exists(raw_dir):
+        return pd.DataFrame()
+
+    records = []
+    for fname in os.listdir(raw_dir):
+        if not fname.endswith(".json"):
+            continue
+        try:
+            with open(os.path.join(raw_dir, fname), "r") as f:
+                data = json.load(f)
+            date = pd.to_datetime(data.get("start_date_local", None), errors="coerce")
+            dist = data.get("distance", 0)
+            if isinstance(dist, dict):
+                dist = dist.get("data", [0])[-1] if "data" in dist else 0
+            tss = data.get("tss", None)
+            avgp = data.get("average_watts", None)
+            records.append(
+                {
+                    "date": date,
+                    "distance_km": dist / 1000 if dist else 0,
+                    "avg_power": avgp if avgp else 0,
+                    "tss": tss if tss else 0,
+                }
+            )
+        except Exception:
+            continue
+
+    df = pd.DataFrame(records).dropna(subset=["date"])
+    return df
