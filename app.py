@@ -88,10 +88,10 @@ TABS = {
 if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = "Ride History"
 
+# --- Material 3 Navbar Styling ---
 st.markdown(
     """
     <style>
-    /* ======= Material Design 3 Top Nav Bar ======= */
     .top-nav {
         display:flex;justify-content:space-between;align-items:center;
         background:var(--md-sys-color-surface-variant,#ffffff);
@@ -121,6 +121,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# --- Navbar HTML ---
 nav_html = "<div class='top-nav'><div class='brand'>Cycling Dashboard</div><div class='nav-tabs'>"
 for name in TABS.keys():
     active = "active" if st.session_state["active_tab"] == name else ""
@@ -128,11 +129,16 @@ for name in TABS.keys():
 nav_html += "</div></div>"
 st.markdown(nav_html, unsafe_allow_html=True)
 
-# Parse tab selection from URL query
-query = st.experimental_get_query_params()
-if "tab" in query and query["tab"][0] in TABS:
-    st.session_state["active_tab"] = query["tab"][0]
-    st.experimental_set_query_params(tab=query["tab"][0])
+# ==============================================================
+# 🧩 HANDLE QUERY PARAMS (NEW API)
+# ==============================================================
+
+query = st.query_params  # ✅ new Streamlit API (replaces experimental)
+if "tab" in query and query["tab"] in TABS:
+    st.session_state["active_tab"] = query["tab"]
+else:
+    # sync URL param with current tab
+    st.query_params.update({"tab": st.session_state["active_tab"]})
 
 # ==============================================================
 # 📊 RENDER CURRENT TAB
