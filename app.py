@@ -31,17 +31,21 @@ st.set_page_config(page_title="Cycling Coaching Dashboard", layout="wide")
 st.markdown(
     """
     <style>
+st.markdown(
+    """
+    <style>
     /* ==========================================================
-       Material Design 3 — Streamlit-native Purple Theme
+       Material Design 3 — Streamlit-native Purple Theme (Fixes)
+       - Consistent pill buttons
+       - No visible band between header and tabs
        ========================================================== */
     :root {
       --md3-primary: #6750A4;
       --md3-on-primary: #FFFFFF;
       --md3-surface: #FFFBFE;
-      --md3-surface-variant: #F4EFFA;
-      --md3-outline: #E0E0E0;
       --md3-on-surface: #1C1B1F;
-      --md3-radius: 12px;
+      --md3-outline: rgba(0,0,0,0.12);
+      --md3-radius-pill: 9999px;
     }
 
     html, body, [class*="block-container"] {
@@ -72,48 +76,51 @@ st.markdown(
       letter-spacing: 0.01em;
     }
 
-    /* ---- TAB BAR ---- */
+    /* ---- TAB BAR (no band) ---- */
     .tab-bar {
-      background: var(--md3-surface-variant);
-      border-bottom: 1px solid var(--md3-outline);
+      background: transparent;            /* remove purple band */
+      border: 0;                          /* no divider line */
+      box-shadow: none;                   /* no shadow strip */
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
-      padding: 20px 16px 16px 16px; /* adds space below top bar */
       gap: 12px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      padding: 16px 16px 8px 16px;        /* keep spacing only */
+      margin-top: 8px;                    /* small space under top bar */
     }
 
-    /* Streamlit buttons inside tab bar */
+    /* ---- INACTIVE TABS (true pills) ---- */
     .tab-bar div.stButton > button {
-      background: var(--md3-primary);
-      color: var(--md3-on-primary);
-      border: none;
-      border-radius: 24px;
-      padding: 10px 18px;
-      font-weight: 500;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
-      transition: all 0.2s ease;
+      background: #FFFFFF !important;                        /* clean surface */
+      color: var(--md3-on-surface) !important;
+      border: 1px solid var(--md3-outline) !important;
+      border-radius: var(--md3-radius-pill) !important;      /* <— pill shape */
+      padding: 10px 18px !important;
+      font-weight: 500 !important;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.10) !important;
+      transition: all 0.2s ease !important;
     }
     .tab-bar div.stButton > button:hover {
-      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      border-color: var(--md3-primary) !important;
+      color: var(--md3-primary) !important;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.16) !important;
       transform: translateY(-1px);
-      background: #5b43a0;
+      background: #FFFFFF !important;
     }
 
-    /* Active tab style */
+    /* ---- ACTIVE TAB (tonal pill, same shape & padding) ---- */
     .tab-active {
       display: inline-block;
       padding: 10px 18px;
-      border-radius: 24px;
+      border-radius: var(--md3-radius-pill);                 /* match buttons */
       font-weight: 600;
       color: var(--md3-primary);
-      background: #EADDFF;
+      background: #EADDFF;                                   /* MD3 tonal */
       border: 2px solid var(--md3-primary);
-      box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+      box-shadow: 0 3px 6px rgba(0,0,0,0.12);
     }
 
-    /* ---- FAB ---- */
+    /* ---- FAB (unchanged) ---- */
     .fab {
       position: fixed;
       bottom: 24px;
@@ -132,19 +139,15 @@ st.markdown(
       cursor: pointer;
       transition: transform 0.25s, background 0.25s;
     }
-    .fab:hover {
-      transform: scale(1.05);
-      background: #5b43a0;
-    }
+    .fab:hover { transform: scale(1.05); background: #5b43a0; }
 
     /* ---- ANIMATIONS ---- */
-    .fade-in {
-      animation: fadeIn 0.3s ease both;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to   { opacity: 1; transform: none; }
-    }
+    .fade-in { animation: fadeIn 0.3s ease both; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
     </style>
     """,
     unsafe_allow_html=True,
