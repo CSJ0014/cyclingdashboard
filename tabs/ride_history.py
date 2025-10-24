@@ -1,106 +1,97 @@
+# ==============================================================
+# 🚴 RIDE HISTORY TAB — Material Design 3 Version
+# Lists rides, shows basic stats, and links to Ride Analysis
+# ==============================================================
+
 import streamlit as st
+import os
+import json
 import pandas as pd
-import os, json
+from datetime import datetime
 
 RAW_DIR = "ride_data/raw"
 
-def safe_get_distance_miles(data):
-    """Return distance in miles from any data format (Strava or FIT-style)."""
-    try:
-        # --- Strava API format (flat) ---
-        if isinstance(data.get("distance"), (int, float)):
-            return round(float(data["distance"]) / 1609.34, 2)
-        # --- FIT parser style (nested dict with .data) ---
-        elif isinstance(data.get("distance"), dict) and "data" in data["distance"]:
-            dist_list = data["distance"]["data"]
-            return round(dist_list[-1] / 1609.34, 2) if dist_list else 0.0
-    except Exception:
-        return 0.0
-    return 0.0
-
-
-def safe_get_name(data, file_name):
-    """Return clean activity name or fallback."""
-    return (
-        data.get("name")
-        or data.get("_meta", {}).get("name")
-        or f"Unnamed Activity ({file_name.replace('.json', '')})"
-    )
-
-
-def list_rides():
-    """List all valid ride files (sorted newest to oldest)."""
-    rides = []
-    if not os.path.exists(RAW_DIR):
-        os.makedirs(RAW_DIR)
-        return pd.DataFrame()
-
-    for f in sorted(os.listdir(RAW_DIR), reverse=True):
-        if not f.endswith(".json"):
-            continue
-        path = os.path.join(RAW_DIR, f)
-        try:
-            with open(path, "r") as file:
-                data = json.load(file)
-            name = safe_get_name(data, f)
-            distance = safe_get_distance_miles(data)
-
-            # Try to read power & HR if present (Strava or FIT)
-            avg_power = None
-            avg_hr = None
-
-            if "average_watts" in data:
-                avg_power = data["average_watts"]
-            elif isinstance(data.get("watts"), dict) and "data" in data["watts"]:
-                watts = data["watts"]["data"]
-                avg_power = sum(watts) / len(watts) if watts else None
-
-            if "average_heartrate" in data:
-                avg_hr = data["average_heartrate"]
-            elif isinstance(data.get("heartrate"), dict) and "data" in data["heartrate"]:
-                hrs = data["heartrate"]["data"]
-                avg_hr = sum(hrs) / len(hrs) if hrs else None
-
-            rides.append({
-                "Activity": name,
-                "File": f,
-                "Distance (mi)": distance,
-                "Avg Power (W)": round(avg_power, 1) if avg_power else None,
-                "Avg HR (bpm)": round(avg_hr, 1) if avg_hr else None
-            })
-        except Exception as e:
-            st.warning(f"⚠️ Skipped {f}: {e}")
-            continue
-
-    return pd.DataFrame(rides)
-
+# --------------------------------------------------------------
+# 🎯 MAIN ENTRY POINT
+# --------------------------------------------------------------
 
 def render():
-    st.title("🚴 Ride History")
+    st.title("Ride History")
 
-    rides = list_rides()
-    if rides.empty:
-        st.info("No rides found. Sync with Strava or upload FIT files first.")
+    # Ensure data directory exists
+    if not os.path.exists(RAW_DIR):
+        st.info("No rides found yet. Sync with Strava to import activities.")
         return
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.subheader("📋 Recent Rides")
+    # Load rides
+    rides = []
+    for fname in os.listdir(RAW_DIR):
+        if not fname.endswith(".json"):
+            continue
+        path = os.path.join(RAW_DIR, fname)
 
-    for _, row in rides.iterrows():
-        cols = st.columns([4, 0.6, 0.6])
-        cols[0].markdown(
-            f"**{row['Activity']}** — {row['Distance (mi)']:.2f} mi  |  "
-            f"⚡ {row['Avg Power (W)'] or '—'} W  |  ❤️ {row['Avg HR (bpm)'] or '—'} bpm"
-        )
+        try:
+            with open(path, "r") as f:
+                data = json.load(f)
 
-        if cols[1].button("🔍", key=f"view_{row['File']}"):
-            st.session_state["selected_ride"] = row["File"]
-            st.session_state["active_tab"] = "📊 Ride Analysis"
-            st.rerun()
+            # Parse and normalize data
+            rides.append({
+                "name": data.get("name", "Untitled Ride"),
+                "date": data.get("start_date_local", "Unknown"),
+                "distance_km": round(data.get("distance", 0) / 1000, 1),
+                "moving_time_min": round(data.get("moving_time", 0) / 60, 1),
+                "avg_power": int(data.get("average_watts", 0)),
+                "id": data.get("id", fname.replace("activity_", "").replace(".json", "")),
+                "path": path,
+            })
+        except Exception:
+            continue
 
-        if cols[2].button("🗑️", key=f"delete_{row['File']}"):
-            os.remove(os.path.join(RAW_DIR, row["File"]))
-            st.success(f"Deleted {row['Activity']}")
-            st.rerun()
+    if not rides:
+        st.warning("No rides available. Try syncing with Strava.")
+        return
 
-    st.markdown('</div>', unsafe_allow_html=True)
+    # Sort rides by date descending (most recent first)
+    df = pd.DataFrame(rides)
+    if "date" in df.columns:
+        try:
+            df["date"] = pd.to_datetime(df["date"], errors="coerce")
+            df = df.sort_values("date", ascending=False)
+        except Exception:
+            pass
+
+    st.markdown("### Recent Rides")
+
+    # ----------------------------------------------------------
+    # 📋 Render Ride Cards with Analyze Button
+    # ----------------------------------------------------------
+    for i, row in df.iterrows():
+        with st.container():
+            st.markdown(
+                f"""
+                <div style='padding: 10px; border-radius: 10px; margin-bottom: 8px;
+                            background-color: #f7f7f8; border: 1px solid #ddd;'>
+                    <div style='display: flex; justify-content: space-between; align-items: center;'>
+                        <div>
+                            <strong>{row['name']}</strong><br>
+                            <span style='font-size: 0.9em; color: #666;'>📅 {row['date'].strftime('%b %d, %Y') if isinstance(row['date'], datetime) else row['date']}</span>
+                        </div>
+                        <div style='font-size: 0.9em; color: #444;'>
+                            🏁 {row['distance_km']} km |
+                            ⏱ {row['moving_time_min']} min |
+                            ⚡ {row['avg_power']} W
+                        </div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            cols = st.columns([9, 1])
+            with cols[1]:
+                if st.button("🔍", key=f"analyze_{row['id']}", help="Analyze this ride"):
+                    # Save selection and navigate to Ride Analysis
+                    st.session_state["selected_ride_path"] = row["path"]
+                    st.session_state["active_tab"] = "Ride Analysis"
+                    st.query_params["tab"] = "Ride Analysis"
+                    st.rerun()
