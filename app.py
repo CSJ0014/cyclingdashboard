@@ -7,6 +7,11 @@ import streamlit as st
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
+from utils.md3_components import inject_md3_stylesheet
+
+# Load Material Design 3 theme
+inject_md3_stylesheet()
+
 # ---- Internal imports ----
 from utils.strava_sync import fetch_strava_rides, auto_sync_if_ready, reconnect_prompt
 from tabs import (
