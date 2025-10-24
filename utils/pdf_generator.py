@@ -212,22 +212,38 @@ def _load_all_rides_for_summary(raw_dir: str) -> pd.DataFrame:
         try:
             with open(os.path.join(raw_dir, fname), "r") as f:
                 data = json.load(f)
-            date = pd.to_datetime(data.get("start_date_local", None), errors="coerce")
+
+            # Safely parse date
+            date_val = data.get("start_date_local") or data.get("start_date") or None
+            if not date_val:
+                continue  # skip malformed file
+            date = pd.to_datetime(date_val, errors="coerce")
+            if pd.isna(date):
+                continue
+
+            # Handle both scalar and stream-based distances
             dist = data.get("distance", 0)
             if isinstance(dist, dict):
                 dist = dist.get("data", [0])[-1] if "data" in dist else 0
-            tss = data.get("tss", None)
-            avgp = data.get("average_watts", None)
-            records.append(
-                {
-                    "date": date,
-                    "distance_km": dist / 1000 if dist else 0,
-                    "avg_power": avgp if avgp else 0,
-                    "tss": tss if tss else 0,
-                }
-            )
-        except Exception:
+
+            tss = data.get("tss", 0)
+            avgp = data.get("average_watts", 0)
+            records.append({
+                "date": date,
+                "distance_km": dist / 1000 if dist else 0,
+                "avg_power": avgp or 0,
+                "tss": tss or 0,
+            })
+        except Exception as e:
+            # Skip bad file but log if needed
             continue
 
-    df = pd.DataFrame(records).dropna(subset=["date"])
+    # Safeguard — only keep valid records
+    if not records:
+        return pd.DataFrame(columns=["date", "distance_km", "avg_power", "tss"])
+
+    df = pd.DataFrame(records)
+    df = df.dropna(subset=["date"])
+    df = df.sort_values("date")
     return df
+     
