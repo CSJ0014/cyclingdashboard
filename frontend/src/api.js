@@ -2,7 +2,7 @@
 const API_BASE = "https://cyclingdashboard-7496mkxn3-csj0014s-projects.vercel.app/";
 
 export async function listRides() {
-  const res = await fetch(`${API_BASE}/rides`);
+  const res = await fetch(`${API_BASE}/rides/`);
   if (!res.ok) throw new Error("Failed to list rides");
   return res.json();
 }
@@ -21,5 +21,6 @@ export async function generateReport(fname) {
     const txt = await res.text();
     throw new Error(`PDF generation failed: ${txt}`);
   }
-  return res.blob();
+  const blob = await res.blob();
+  return blob;
 }
