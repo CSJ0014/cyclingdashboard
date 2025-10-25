@@ -1,5 +1,5 @@
 // frontend/src/api.js
-const API_BASE = "https://cyclingdashboard-backend.onrender.com/api";
+const API_BASE = "https://cyclingdashboard-7496mkxn3-csj0014s-projects.vercel.app/";
 
 export async function listRides() {
   const res = await fetch(`${API_BASE}/rides`);
